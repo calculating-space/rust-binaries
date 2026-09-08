@@ -72,3 +72,14 @@ fn repo_root_is_this_repository() {
     assert!(root.join("cs/Cargo.toml").is_file());
     assert!(root.join("trybox/Cargo.toml").is_file());
 }
+
+#[test]
+fn agent_instructions_are_one_text_under_two_names() {
+    // Claude Code reads CLAUDE.md, most other agents AGENTS.md: same file, two names.
+    let root = repo_root();
+    let agents = std::fs::read_to_string(root.join("AGENTS.md")).unwrap();
+    let claude = std::fs::read_to_string(root.join("CLAUDE.md")).unwrap();
+    assert_eq!(agents, claude, "AGENTS.md and CLAUDE.md have drifted apart");
+    assert!(agents.contains("cargo install --path cs"));
+    assert!(root.join("bootstrap.sh").is_file());
+}

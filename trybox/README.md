@@ -21,14 +21,27 @@ sandbox exists, disposing it is one of the options.
 
 ## Your first five minutes
 
-**Install.** From the repository root, once:
+**Install.** On an Apple Silicon Mac, once. The first line installs whatever
+prerequisites are missing and builds `cs`, the router that runs any tool here
+and builds it on first use; the rest is what it does, if you would rather do
+it by hand.
 
 ```sh
-cargo install --path cs
+curl -fsSL https://raw.githubusercontent.com/calculating-space/rust-binaries/main/bootstrap.sh | sh
 ```
 
-That gives you `cs`, which runs any tool here and builds it on first use. Then
-`cs trybox` is the command. (Or build trybox alone and run its binary.)
+```sh
+xcode-select --install 2>/dev/null || true
+command -v brew >/dev/null || /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+command -v cargo >/dev/null || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+brew install uv ffmpeg
+git clone https://github.com/calculating-space/rust-binaries.git ~/rust-binaries   # keep it here: cs remembers this path
+cd ~/rust-binaries && cargo install --path cs
+```
+
+Then `cs trybox` is the command. `cs trybox doctor` says which recipes this
+machine can run before anything is downloaded. Linux and Intel Macs can run
+the `bare` recipe only, since the others need the Mac GPU.
 
 **Start something new.** Run `cs trybox`, choose *Start something new*, and
 pick a project. Each one says what it is, how many steps its tour has, and
@@ -192,7 +205,7 @@ commands, for scripts or for going straight to a point.
 | `trybox run mlx -- python -V` | One command inside the sandbox |
 | `trybox dispose mlx -y` | Delete a sandbox. Several names, or `--all`. Asks unless `-y` |
 | `trybox create NAME --recipe mlx` | Prepare without the tour; `--dry-run` prints the plan as JSON, `--notify` posts a desktop notification, `--agent` launches the agent when ready |
-| `trybox doctor` | Which backends and the claude CLI are usable |
+| `trybox doctor` | Which backends and the claude CLI are usable, and which recipes this machine can run (exit `3` when none) |
 
 Outside a terminal (a pipe, a script) every menu prints numbered and reads a
 line from stdin, so `printf '1\nq\n' | trybox explore mlx` runs the first

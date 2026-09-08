@@ -169,30 +169,16 @@ fn run(cli: Cli) -> Result<ExitCode, String> {
     };
     match command {
         Cmd::Doctor { json } => {
-            let report = doctor();
+            let report = doctor(&root);
             if json {
                 println!(
                     "{}",
                     serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
                 );
             } else {
-                println!(
-                    "host: {} ({} GB, {} {})",
-                    report.host.chip, report.host.memory_gb, report.host.os, report.host.arch
-                );
-                for t in &report.tools {
-                    println!(
-                        "{:<14} {} {}",
-                        t.name,
-                        if t.available { "ok  " } else { "MISSING" },
-                        t.detail
-                    );
-                }
-                for n in &report.notes {
-                    println!("note: {n}");
-                }
+                print!("{}", trybox::doctor::render(&report));
             }
-            Ok(ExitCode::SUCCESS)
+            Ok(ExitCode::from(report.exit_code()))
         }
         Cmd::Recipes {
             name,

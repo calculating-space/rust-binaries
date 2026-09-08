@@ -395,6 +395,53 @@ fn stale_wrapper_is_refreshed_before_running() {
 }
 
 #[test]
+fn doctor_lists_every_recipe_with_a_verdict_and_a_reason() {
+    use speccheck::Outcome;
+    use trybox::doctor::{RecipeVerdict, Report, ToolStatus, render};
+    let tmp = tempfile::tempdir().unwrap();
+    let verdicts = trybox::doctor::recipe_verdicts(tmp.path());
+    let names: Vec<_> = verdicts.iter().map(|v| v.name.as_str()).collect();
+    assert_eq!(names, ["mlx", "whisper", "torch", "bare"]);
+    for v in &verdicts {
+        assert_eq!(v.outcome == Outcome::CanRun, v.why.is_empty(), "{v:?}");
+    }
+    let report = Report {
+        host: HostInfo::default(),
+        tools: vec![ToolStatus {
+            name: "uv".into(),
+            available: true,
+            detail: "uv 0.11".into(),
+        }],
+        recipes: vec![
+            RecipeVerdict {
+                name: "mlx".into(),
+                outcome: Outcome::CanRun,
+                why: String::new(),
+            },
+            RecipeVerdict {
+                name: "whisper".into(),
+                outcome: Outcome::CannotRun,
+                why: "`ffmpeg` installed: not found; brew install ffmpeg".into(),
+            },
+        ],
+        notes: vec![],
+    };
+    let text = render(&report);
+    assert!(text.contains("RECIPE   VERDICT         WHY"), "{text}");
+    assert!(text.contains("mlx      can run"), "{text}");
+    assert!(
+        text.contains(
+            "whisper  cannot run      `ffmpeg` installed: not found; brew install ffmpeg"
+        ),
+        "{text}"
+    );
+    assert_eq!(report.exit_code(), 0, "one runnable recipe is enough");
+    let mut none = report.clone();
+    none.recipes[0].outcome = Outcome::CannotRun;
+    assert_eq!(none.exit_code(), 3);
+}
+
+#[test]
 fn dispose_removes_every_sandbox_and_reports() {
     let tmp = tempfile::tempdir().unwrap();
     for n in ["a", "b"] {

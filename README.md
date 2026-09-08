@@ -1,7 +1,5 @@
 # rust-binaries
 
-[![ci](https://github.com/calculating-space/rust-binaries/actions/workflows/ci.yml/badge.svg)](https://github.com/calculating-space/rust-binaries/actions/workflows/ci.yml)
-
 A collection of focused deterministic tools that people and agents can use on
 their own or compose through files, stdin/stdout and library calls. Each package
 has a concrete job, its own CLI, tests and documented output contract.
@@ -15,14 +13,41 @@ has a concrete job, its own CLI, tests and documented output contract.
 
 More tools from the same workshop will be published here as they settle.
 
-## Try something
+## Quick start
+
+On an Apple Silicon Mac, paste this once. It installs the prerequisites that
+are missing (Xcode tools, Homebrew, Rust, uv, ffmpeg), clones the repository,
+builds the `cs` router, and opens the trybox menu. About ten minutes on a
+machine with nothing on it, mostly compiling and downloading.
 
 ```sh
-cargo install --path cs && cs trybox
+curl -fsSL https://raw.githubusercontent.com/calculating-space/rust-binaries/main/bootstrap.sh | sh
 ```
 
-A menu: start a guided tour of a project (MLX, PyTorch), see it run on your
-machine, hand over to an agent, dispose of it when done. See [trybox](trybox).
+Or by hand:
+
+```sh
+# Apple Silicon Mac. Linux and Intel: only the `bare` recipe runs today.
+xcode-select --install 2>/dev/null || true
+command -v brew >/dev/null || /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+command -v cargo >/dev/null || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+brew install uv ffmpeg
+git clone https://github.com/calculating-space/rust-binaries.git ~/rust-binaries   # keep it here: cs remembers this path
+cd ~/rust-binaries && cargo install --path cs
+cs trybox
+```
+
+`cs trybox` is a menu: start a guided tour of a project (Whisper, MLX,
+PyTorch), see it run on your machine, hand over to an agent, dispose of it when
+done. The whisper tour downloads about 2 GB into `~/.trybox/whisper`; disposing
+from the menu removes all of it. `cs trybox doctor` says what your machine can
+run before anything is downloaded. See [trybox](trybox).
+
+Have an agent do it instead: send it this sentence.
+
+> Clone https://github.com/calculating-space/rust-binaries into ~/rust-binaries
+> and follow its AGENTS.md until `cs trybox check whisper` passes, then tell me
+> what to run.
 
 ## Boundaries
 

@@ -1,4 +1,7 @@
+use crate::recipe::{RECIPES, outcome_here};
 use serde::{Deserialize, Serialize};
+use speccheck::{Outcome, Severity, need};
+use std::path::Path;
 use std::process::Command;
 
 /// What the sandbox will run on. Recorded in the manifest and shown to the agent.
@@ -66,11 +69,97 @@ pub struct ToolStatus {
     pub detail: String,
 }
 
+/// One recipe's verdict for this machine, with the first reason when it is not a plain yes.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RecipeVerdict {
+    pub name: String,
+    pub outcome: Outcome,
+    pub why: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Report {
     pub host: HostInfo,
     pub tools: Vec<ToolStatus>,
+    /// Every recipe, in menu order: what this machine can run before anything is built.
+    pub recipes: Vec<RecipeVerdict>,
     pub notes: Vec<String>,
+}
+
+impl Report {
+    /// 0 when at least one recipe can run, else speccheck's "cannot run" code, so a
+    /// bootstrap script can branch on it.
+    pub fn exit_code(&self) -> u8 {
+        if self.recipes.iter().any(|r| r.outcome != Outcome::CannotRun) {
+            0
+        } else {
+            Outcome::CannotRun.exit_code()
+        }
+    }
+}
+
+/// Each recipe's outcome-only verdict; `disk_path` is where sandboxes would go.
+pub fn recipe_verdicts(disk_path: &Path) -> Vec<RecipeVerdict> {
+    RECIPES
+        .iter()
+        .map(|r| {
+            let v = outcome_here(r, disk_path);
+            let blame = match v.outcome {
+                Outcome::CanRun => None,
+                Outcome::Pointless => Some(Severity::Pointless),
+                Outcome::CannotRun => Some(Severity::Blocks),
+            };
+            let why = blame
+                .and_then(|sev| v.findings.iter().find(|f| !f.pass && f.severity == sev))
+                .map(|f| format!("{}: {}; {}", need(&f.check), f.actual, f.why))
+                .unwrap_or_default();
+            RecipeVerdict {
+                name: r.name.to_string(),
+                outcome: v.outcome,
+                why,
+            }
+        })
+        .collect()
+}
+
+/// Plain-text report: host, tools, the recipe table, notes.
+pub fn render(r: &Report) -> String {
+    let mut out = format!(
+        "host: {} ({} GB, {} {})\n",
+        r.host.chip, r.host.memory_gb, r.host.os, r.host.arch
+    );
+    for t in &r.tools {
+        out.push_str(&format!(
+            "{:<14} {} {}\n",
+            t.name,
+            if t.available { "ok  " } else { "MISSING" },
+            t.detail
+        ));
+    }
+    if !r.recipes.is_empty() {
+        let width = r
+            .recipes
+            .iter()
+            .map(|x| x.name.len())
+            .max()
+            .unwrap_or(6)
+            .max(6);
+        out.push_str(&format!("\n{:<width$}  {:<15} WHY\n", "RECIPE", "VERDICT"));
+        for x in &r.recipes {
+            let verdict = match x.outcome {
+                Outcome::CanRun => "can run",
+                Outcome::Pointless => "runs, pointless",
+                Outcome::CannotRun => "cannot run",
+            };
+            let line = format!("{:<width$}  {verdict:<15} {}", x.name, x.why);
+            out.push_str(line.trim_end());
+            out.push('\n');
+        }
+    }
+    for n in &r.notes {
+        out.push_str(&format!("note: {n}\n"));
+    }
+    out
 }
 
 fn version_of(bin: &str, args: &[&str]) -> ToolStatus {
@@ -101,8 +190,9 @@ fn version_of(bin: &str, args: &[&str]) -> ToolStatus {
     }
 }
 
-/// Which backends and the agent CLI are usable right now.
-pub fn doctor() -> Report {
+/// Which backends and the agent CLI are usable right now, and which recipes this machine
+/// can run. `disk_path` is the sandbox root, for the free-space checks.
+pub fn doctor(disk_path: &Path) -> Report {
     let host = host_info();
     let mut tools = vec![
         version_of("uv", &["--version"]),
@@ -127,5 +217,10 @@ pub fn doctor() -> Report {
     if host.os == "macos" {
         notes.push("docker on macOS runs a Linux VM with no Metal GPU access; use uv or venv to measure Apple Silicon performance".into());
     }
-    Report { host, tools, notes }
+    Report {
+        host,
+        tools,
+        recipes: recipe_verdicts(disk_path),
+        notes,
+    }
 }

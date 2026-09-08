@@ -23,3 +23,6 @@ target/
 
 # grindstone's tests hold redacted real sessions; kept private until reviewed
 /grindstone/tests/
+
+# working notes and specs, not part of the published tree
+/docs/
