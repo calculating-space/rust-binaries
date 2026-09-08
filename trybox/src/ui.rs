@@ -15,7 +15,11 @@ pub struct Choice {
 
 impl Choice {
     pub fn new(label: impl Into<String>, detail: impl Into<String>) -> Self {
-        Self { label: label.into(), detail: detail.into(), recommended: false }
+        Self {
+            label: label.into(),
+            detail: detail.into(),
+            recommended: false,
+        }
     }
     pub fn recommended(mut self) -> Self {
         self.recommended = true;
@@ -35,20 +39,40 @@ pub fn order(choices: &[Choice]) -> Vec<usize> {
 }
 
 /// One frame of the menu. `cursor` is a position in `order`.
-pub fn render(question: &str, choices: &[Choice], order: &[usize], cursor: usize, color: bool) -> String {
-    let (bold, dim, cyan, reset) = if color { ("\x1b[1m", "\x1b[2m", "\x1b[36m", "\x1b[0m") } else { ("", "", "", "") };
+pub fn render(
+    question: &str,
+    choices: &[Choice],
+    order: &[usize],
+    cursor: usize,
+    color: bool,
+) -> String {
+    let (bold, dim, cyan, reset) = if color {
+        ("\x1b[1m", "\x1b[2m", "\x1b[36m", "\x1b[0m")
+    } else {
+        ("", "", "", "")
+    };
     let mut out = format!("{bold}{question}{reset}\n");
     for (pos, &i) in order.iter().enumerate() {
         let c = &choices[i];
-        let marker = if pos == cursor { format!("{cyan}❯{reset}") } else { " ".into() };
+        let marker = if pos == cursor {
+            format!("{cyan}❯{reset}")
+        } else {
+            " ".into()
+        };
         let rec = if c.recommended { " (Recommended)" } else { "" };
-        let label = if pos == cursor { format!("{cyan}{}{reset}", c.label) } else { c.label.clone() };
+        let label = if pos == cursor {
+            format!("{cyan}{}{reset}", c.label)
+        } else {
+            c.label.clone()
+        };
         out.push_str(&format!("{marker} {:>2}. {label}{rec}\n", pos + 1));
         if !c.detail.is_empty() {
             out.push_str(&format!("      {dim}{}{reset}\n", c.detail));
         }
     }
-    out.push_str(&format!("{dim}↑/↓ or j/k to move · Enter to choose · number to jump · q to go back{reset}\n"));
+    out.push_str(&format!(
+        "{dim}↑/↓ or j/k to move · Enter to choose · number to jump · q to go back{reset}\n"
+    ));
     out
 }
 
@@ -61,7 +85,12 @@ pub fn parse_fallback(line: &str, choices: &[Choice], order: &[usize]) -> Option
     if let Ok(n) = t.parse::<usize>() {
         return order.get(n.checked_sub(1)?).copied();
     }
-    order.iter().copied().find(|&i| choices[i].label.to_lowercase().starts_with(&t.to_lowercase()))
+    order.iter().copied().find(|&i| {
+        choices[i]
+            .label
+            .to_lowercase()
+            .starts_with(&t.to_lowercase())
+    })
 }
 
 struct RawMode {
@@ -70,8 +99,17 @@ struct RawMode {
 
 impl RawMode {
     fn enter() -> Self {
-        let saved = Command::new("stty").arg("-g").stdin(Stdio::inherit()).output().ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
-        let _ = Command::new("stty").args(["-echo", "-icanon", "min", "0", "time", "1"]).stdin(Stdio::inherit()).status();
+        let saved = Command::new("stty")
+            .arg("-g")
+            .stdin(Stdio::inherit())
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+        let _ = Command::new("stty")
+            .args(["-echo", "-icanon", "min", "0", "time", "1"])
+            .stdin(Stdio::inherit())
+            .status();
         print!("\x1b[?25l");
         let _ = std::io::stdout().flush();
         Self { saved }
@@ -85,7 +123,10 @@ impl Drop for RawMode {
         if let Some(s) = &self.saved {
             let _ = Command::new("stty").arg(s).stdin(Stdio::inherit()).status();
         } else {
-            let _ = Command::new("stty").arg("sane").stdin(Stdio::inherit()).status();
+            let _ = Command::new("stty")
+                .arg("sane")
+                .stdin(Stdio::inherit())
+                .status();
         }
     }
 }
@@ -136,7 +177,12 @@ pub fn select(question: &str, choices: &[Choice]) -> Result<Option<usize>, Strin
         print!("{}> ", render(question, choices, &order, 0, false));
         stdout.flush().ok();
         let mut line = String::new();
-        if std::io::stdin().lock().read_line(&mut line).map_err(|e| e.to_string())? == 0 {
+        if std::io::stdin()
+            .lock()
+            .read_line(&mut line)
+            .map_err(|e| e.to_string())?
+            == 0
+        {
             println!();
             return Ok(None);
         }
@@ -167,7 +213,10 @@ pub fn select(question: &str, choices: &[Choice]) -> Result<Option<usize>, Strin
                 print!("\x1b[{lines}A\x1b[J");
                 let picked = matches!(key, Key::Enter).then_some(order[cursor]);
                 match picked {
-                    Some(i) => println!("\x1b[2m{question}\x1b[0m \x1b[36m❯\x1b[0m {}", choices[i].label),
+                    Some(i) => println!(
+                        "\x1b[2m{question}\x1b[0m \x1b[36m❯\x1b[0m {}",
+                        choices[i].label
+                    ),
                     None => println!("\x1b[2m{question} · back\x1b[0m"),
                 }
                 stdout.flush().ok();

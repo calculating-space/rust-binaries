@@ -14,13 +14,28 @@ pub fn ensure_sandbox(root: &Path, r: &Recipe, sandbox: &str) -> Result<Manifest
     if let Ok(m) = load(root, sandbox) {
         return Ok(m);
     }
-    eprintln!("preparing {sandbox} (first time only; installing {} packages)...", r.packages.len());
-    let m = Manifest::new(sandbox, r.backend, r.name, r.python, r.packages.iter().map(|p| p.to_string()).collect(), root.join(sandbox), crate::doctor::host_info());
+    eprintln!(
+        "preparing {sandbox} (first time only; installing {} packages)...",
+        r.packages.len()
+    );
+    let m = Manifest::new(
+        sandbox,
+        r.backend,
+        r.name,
+        r.python,
+        r.packages.iter().map(|p| p.to_string()).collect(),
+        root.join(sandbox),
+        crate::doctor::host_info(),
+    );
     let mut plan = backend::prepare(&m);
-    plan.files.push((m.work_dir().join("CLAUDE.md"), agent::briefing(&m, r)));
+    plan.files
+        .push((m.work_dir().join("CLAUDE.md"), agent::briefing(&m, r)));
     if let Err(e) = backend::run_plan(&m, &plan, true) {
         let _ = std::fs::remove_dir_all(&m.dir);
-        return Err(format!("{e}; rerun with `trybox create {sandbox} --recipe {}` to see the full output", r.name));
+        return Err(format!(
+            "{e}; rerun with `trybox create {sandbox} --recipe {}` to see the full output",
+            r.name
+        ));
     }
     m.save()?;
     Ok(m)
@@ -35,8 +50,20 @@ pub fn run_example(m: &Manifest, e: &Example) -> Result<bool, String> {
     }
     writeln!(out).ok();
     out.flush().ok();
-    let status = exec_command(m, &["sh".into(), "-c".into(), e.run.to_string()]).status().map_err(|e| format!("run: {e}"))?;
-    writeln!(out, "\n   expected: {}{}\n", e.expect, if status.success() { "" } else { "\n   (the command did not exit cleanly)" }).ok();
+    let status = exec_command(m, &["sh".into(), "-c".into(), e.run.to_string()])
+        .status()
+        .map_err(|e| format!("run: {e}"))?;
+    writeln!(
+        out,
+        "\n   expected: {}{}\n",
+        e.expect,
+        if status.success() {
+            ""
+        } else {
+            "\n   (the command did not exit cleanly)"
+        }
+    )
+    .ok();
     Ok(status.success())
 }
 
@@ -56,17 +83,39 @@ pub fn choices(r: &Recipe, p: &Progress, size_bytes: u64) -> Vec<Choice> {
         .iter()
         .enumerate()
         .map(|(i, e)| {
-            let c = Choice::new(format!("{}{}", if p.done(i) { "✓ " } else { "" }, e.title), e.learn);
-            if Some(i) == next_undone { c.recommended() } else { c }
+            let c = Choice::new(
+                format!("{}{}", if p.done(i) { "✓ " } else { "" }, e.title),
+                e.learn,
+            );
+            if Some(i) == next_undone {
+                c.recommended()
+            } else {
+                c
+            }
         })
         .collect();
-    let mut agent = Choice::new("Hand over to the agent", "Open-ended: an agent inside the sandbox proposes and runs experiments with you");
+    let mut agent = Choice::new(
+        "Hand over to the agent",
+        "Open-ended: an agent inside the sandbox proposes and runs experiments with you",
+    );
     if next_undone.is_none() {
         agent = agent.recommended();
     }
     out.push(agent);
-    out.push(Choice::new("Read the man page", format!("What {} is, requirements against this machine, every step with its command", r.name)));
-    out.push(Choice::new("Dispose this sandbox", format!("Delete the environment and everything it downloaded, freeing {}", gb(size_bytes))));
+    out.push(Choice::new(
+        "Read the man page",
+        format!(
+            "What {} is, requirements against this machine, every step with its command",
+            r.name
+        ),
+    ));
+    out.push(Choice::new(
+        "Dispose this sandbox",
+        format!(
+            "Delete the environment and everything it downloaded, freeing {}",
+            gb(size_bytes)
+        ),
+    ));
     out.push(Choice::new("Back", "Keep the sandbox and return"));
     out
 }
@@ -85,7 +134,9 @@ pub fn tour(m: &Manifest, r: &Recipe) -> Result<Next, String> {
         let choices = choices(r, &progress, size);
         let steps = r.tour.len();
         let question = format!("{}: what next? ({})", m.name, progress.summary(steps));
-        let Some(pick) = select(&question, &choices)? else { return Ok(Next::Quit) };
+        let Some(pick) = select(&question, &choices)? else {
+            return Ok(Next::Quit);
+        };
         match pick {
             i if i < steps => {
                 let ok = run_example(m, &r.tour[i])?;
@@ -102,7 +153,11 @@ pub fn tour(m: &Manifest, r: &Recipe) -> Result<Next, String> {
                 print!("\n{}", crate::recipe::man(r, Some(&v)));
             }
             i if i == steps + 2 => {
-                if confirm(&format!("Dispose {} and free {}?", m.name, gb(size)), "Yes, dispose it", "No, keep it")? {
+                if confirm(
+                    &format!("Dispose {} and free {}?", m.name, gb(size)),
+                    "Yes, dispose it",
+                    "No, keep it",
+                )? {
                     for n in backend::destroy(m)? {
                         println!("{n}");
                     }

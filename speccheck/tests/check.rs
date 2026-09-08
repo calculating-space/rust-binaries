@@ -11,7 +11,11 @@ fn m1max() -> Spec {
         memory_gb: 64,
         disk_free_gb: 300,
         disk_path: "/Users/x".into(),
-        gpus: vec![Gpu { kind: GpuKind::Metal, name: "Apple M1 Max (unified memory)".into(), memory_gb: None }],
+        gpus: vec![Gpu {
+            kind: GpuKind::Metal,
+            name: "Apple M1 Max (unified memory)".into(),
+            memory_gb: None,
+        }],
         tools: BTreeMap::from([("uv".to_string(), "uv 0.11".to_string())]),
     }
 }
@@ -21,15 +25,53 @@ fn reqs() -> Requirements {
         version: 1,
         subject: "mlx".into(),
         rules: vec![
-            Rule { check: Check::Platform { any_of: vec![("macos".into(), "aarch64".into()), ("linux".into(), "x86_64".into())] }, severity: Severity::Blocks, why: "no wheels elsewhere".into() },
-            Rule { check: Check::Gpu { any_of: vec![GpuKind::Metal] }, severity: Severity::Pointless, why: "CPU-only otherwise".into() },
-            Rule { check: Check::Tool { name: "uv".into() }, severity: Severity::Blocks, why: "builds the env".into() },
-            Rule { check: Check::MinMemoryGb { gb: 8 }, severity: Severity::Blocks, why: "3B model".into() },
-            Rule { check: Check::MinMemoryGb { gb: 16 }, severity: Severity::Recommended, why: "8B model".into() },
+            Rule {
+                check: Check::Platform {
+                    any_of: vec![
+                        ("macos".into(), "aarch64".into()),
+                        ("linux".into(), "x86_64".into()),
+                    ],
+                },
+                severity: Severity::Blocks,
+                why: "no wheels elsewhere".into(),
+            },
+            Rule {
+                check: Check::Gpu {
+                    any_of: vec![GpuKind::Metal],
+                },
+                severity: Severity::Pointless,
+                why: "CPU-only otherwise".into(),
+            },
+            Rule {
+                check: Check::Tool { name: "uv".into() },
+                severity: Severity::Blocks,
+                why: "builds the env".into(),
+            },
+            Rule {
+                check: Check::MinMemoryGb { gb: 8 },
+                severity: Severity::Blocks,
+                why: "3B model".into(),
+            },
+            Rule {
+                check: Check::MinMemoryGb { gb: 16 },
+                severity: Severity::Recommended,
+                why: "8B model".into(),
+            },
         ],
         tiers: vec![
-            Tier { name: "small".into(), enables: "3B".into(), checks: vec![Check::MinMemoryGb { gb: 8 }, Check::MinDiskFreeGb { gb: 4 }] },
-            Tier { name: "huge".into(), enables: "70B".into(), checks: vec![Check::MinMemoryGb { gb: 128 }, Check::MinDiskFreeGb { gb: 45 }] },
+            Tier {
+                name: "small".into(),
+                enables: "3B".into(),
+                checks: vec![Check::MinMemoryGb { gb: 8 }, Check::MinDiskFreeGb { gb: 4 }],
+            },
+            Tier {
+                name: "huge".into(),
+                enables: "70B".into(),
+                checks: vec![
+                    Check::MinMemoryGb { gb: 128 },
+                    Check::MinDiskFreeGb { gb: 45 },
+                ],
+            },
         ],
     }
 }
@@ -69,7 +111,11 @@ fn linux_without_gpu_is_pointless_not_blocked() {
     let v = check(&s, &reqs());
     assert_eq!(v.outcome, Outcome::Pointless);
     assert_eq!(v.outcome.exit_code(), 2);
-    let gpu = v.findings.iter().find(|f| matches!(f.check, Check::Gpu { .. })).unwrap();
+    let gpu = v
+        .findings
+        .iter()
+        .find(|f| matches!(f.check, Check::Gpu { .. }))
+        .unwrap();
     assert!(!gpu.pass);
     assert_eq!(gpu.actual, "no GPU");
 }
@@ -108,7 +154,10 @@ fn contracts_roundtrip_through_json() {
 
 #[test]
 fn detect_produces_a_plausible_spec() {
-    let s = spec::detect(std::path::Path::new("."), &["cargo".into(), "definitely-not-a-tool-xyz".into()]);
+    let s = spec::detect(
+        std::path::Path::new("."),
+        &["cargo".into(), "definitely-not-a-tool-xyz".into()],
+    );
     assert_eq!(s.version, CONTRACT_VERSION);
     assert!(s.cores >= 1);
     assert!(s.memory_gb >= 1);
@@ -132,7 +181,10 @@ fn tempfile_dir() -> std::path::PathBuf {
 #[test]
 fn render_keeps_columns_aligned_with_long_tool_versions() {
     let mut s = m1max();
-    s.tools.insert("uv".into(), "uv 0.11.28 (Homebrew 2026-07-07 aarch64-apple-darwin)".into());
+    s.tools.insert(
+        "uv".into(),
+        "uv 0.11.28 (Homebrew 2026-07-07 aarch64-apple-darwin)".into(),
+    );
     let text = render(&check(&s, &reqs()));
     let line = text.lines().find(|l| l.contains("`uv` installed")).unwrap();
     assert!(line.contains("uv 0.11.28 (H…"), "{line}");

@@ -75,8 +75,13 @@ pub struct ToolResultBlock<'a> {
 }
 
 pub fn extract_user_content(message: Option<&Value>) -> UserContent<'_> {
-    let mut out = UserContent { text: String::new(), tool_results: Vec::new() };
-    let Some(content) = message.and_then(|m| m.get("content")) else { return out };
+    let mut out = UserContent {
+        text: String::new(),
+        tool_results: Vec::new(),
+    };
+    let Some(content) = message.and_then(|m| m.get("content")) else {
+        return out;
+    };
     match content {
         Value::String(s) => out.text = s.clone(),
         Value::Array(blocks) => {
@@ -199,7 +204,10 @@ pub fn extract_assistant_message(message: Option<&Value>, want_text: bool) -> As
 }
 
 pub fn usage_i64(usage: Option<&Value>, key: &str) -> i64 {
-    usage.and_then(|u| u.get(key)).and_then(Value::as_i64).unwrap_or(0)
+    usage
+        .and_then(|u| u.get(key))
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
 }
 
 pub fn usage_nested_i64(usage: Option<&Value>, outer: &str, key: &str) -> i64 {

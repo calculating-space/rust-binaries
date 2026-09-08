@@ -61,5 +61,7 @@ pub fn parse_since(s: &str, now_ms: i64) -> Result<i64> {
         let dt = d.and_hms_opt(0, 0, 0).unwrap();
         return Ok(Utc.from_utc_datetime(&dt).timestamp_millis());
     }
-    Err(anyhow!("cannot parse --since value: {s:?} (expected e.g. 30d, 12h, or YYYY-MM-DD)"))
+    Err(anyhow!(
+        "cannot parse --since value: {s:?} (expected e.g. 30d, 12h, or YYYY-MM-DD)"
+    ))
 }

@@ -23,17 +23,28 @@ fn chip() -> String {
     }
     std::fs::read_to_string("/proc/cpuinfo")
         .ok()
-        .and_then(|s| s.lines().find(|l| l.starts_with("model name")).map(|l| l.split(':').nth(1).unwrap_or("").trim().to_string()))
+        .and_then(|s| {
+            s.lines()
+                .find(|l| l.starts_with("model name"))
+                .map(|l| l.split(':').nth(1).unwrap_or("").trim().to_string())
+        })
         .unwrap_or_else(|| "unknown".into())
 }
 
 fn memory_gb() -> u64 {
     if cfg!(target_os = "macos") {
-        return sysctl("hw.memsize").and_then(|s| s.parse::<u64>().ok()).map(|b| b >> 30).unwrap_or(0);
+        return sysctl("hw.memsize")
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(|b| b >> 30)
+            .unwrap_or(0);
     }
     std::fs::read_to_string("/proc/meminfo")
         .ok()
-        .and_then(|s| s.lines().find(|l| l.starts_with("MemTotal")).and_then(|l| l.split_whitespace().nth(1)?.parse::<u64>().ok()))
+        .and_then(|s| {
+            s.lines()
+                .find(|l| l.starts_with("MemTotal"))
+                .and_then(|l| l.split_whitespace().nth(1)?.parse::<u64>().ok())
+        })
         .map(|kb| kb >> 20)
         .unwrap_or(0)
 }
@@ -49,7 +60,11 @@ pub fn disk_free_gb(path: &Path) -> u64 {
         }
     }
     run("df", &["-k", &probe.display().to_string()])
-        .and_then(|s| s.lines().nth(1).and_then(|l| l.split_whitespace().nth(3)?.parse::<u64>().ok()))
+        .and_then(|s| {
+            s.lines()
+                .nth(1)
+                .and_then(|l| l.split_whitespace().nth(3)?.parse::<u64>().ok())
+        })
         .map(|kb| kb >> 20)
         .unwrap_or(0)
 }
@@ -57,14 +72,28 @@ pub fn disk_free_gb(path: &Path) -> u64 {
 fn gpus(os: &str, arch: &str, chip: &str) -> Vec<Gpu> {
     let mut out = Vec::new();
     if os == "macos" && arch == "aarch64" {
-        out.push(Gpu { kind: GpuKind::Metal, name: format!("{chip} (unified memory)"), memory_gb: None });
+        out.push(Gpu {
+            kind: GpuKind::Metal,
+            name: format!("{chip} (unified memory)"),
+            memory_gb: None,
+        });
     }
-    if let Some(text) = run("nvidia-smi", &["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"]) {
+    if let Some(text) = run(
+        "nvidia-smi",
+        &[
+            "--query-gpu=name,memory.total",
+            "--format=csv,noheader,nounits",
+        ],
+    ) {
         for line in text.lines() {
             let mut parts = line.split(',').map(str::trim);
             let name = parts.next().unwrap_or("NVIDIA").to_string();
             let mb = parts.next().and_then(|m| m.parse::<u64>().ok());
-            out.push(Gpu { kind: GpuKind::Cuda, name, memory_gb: mb.map(|m| m / 1024) });
+            out.push(Gpu {
+                kind: GpuKind::Cuda,
+                name,
+                memory_gb: mb.map(|m| m / 1024),
+            });
         }
     }
     out
@@ -76,7 +105,11 @@ fn tool_version(name: &str) -> Option<String> {
         return None;
     }
     let text = String::from_utf8_lossy(&out.stdout);
-    let text = if text.trim().is_empty() { String::from_utf8_lossy(&out.stderr).to_string() } else { text.to_string() };
+    let text = if text.trim().is_empty() {
+        String::from_utf8_lossy(&out.stderr).to_string()
+    } else {
+        text.to_string()
+    };
     Some(text.lines().next().unwrap_or("").trim().to_string())
 }
 
@@ -94,7 +127,9 @@ pub fn detect(disk_path: &Path, tools: &[String]) -> Spec {
     }
     Spec {
         version: CONTRACT_VERSION,
-        cores: std::thread::available_parallelism().map(|n| n.get() as u32).unwrap_or(1),
+        cores: std::thread::available_parallelism()
+            .map(|n| n.get() as u32)
+            .unwrap_or(1),
         memory_gb: memory_gb(),
         disk_free_gb: disk_free_gb(disk_path),
         disk_path: disk_path.display().to_string(),

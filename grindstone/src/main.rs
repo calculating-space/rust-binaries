@@ -60,9 +60,21 @@ enum Command {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
-        Command::Scan { root, out, since, projects, include_text, force } => {
-            scan::run(scan::ScanOpts { root, out, since, projects, include_text, force })
-        }
+        Command::Scan {
+            root,
+            out,
+            since,
+            projects,
+            include_text,
+            force,
+        } => scan::run(scan::ScanOpts {
+            root,
+            out,
+            since,
+            projects,
+            include_text,
+            force,
+        }),
         Command::Check { root, out } => check::run(&root, &out),
         Command::Enrich | Command::Stats => {
             eprintln!("not yet implemented");

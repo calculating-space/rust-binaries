@@ -302,7 +302,9 @@ pub fn process_session(
                 if has_tool_result {
                     // Result carrier: match to pending tool_use blocks.
                     for tr in &content.tool_results {
-                        let Some(&ti) = tool_index.get(tr.tool_use_id) else { continue };
+                        let Some(&ti) = tool_index.get(tr.tool_use_id) else {
+                            continue;
+                        };
                         let tc = &mut out.tool_calls[ti];
                         if let Some(t) = ts {
                             tc.duration_ms = Some((t - tc.ts).max(0));
@@ -356,9 +358,7 @@ pub fn process_session(
                     }
                 } else {
                     let fresh = current
-                        .map(|i| {
-                            entry.prompt_id.as_deref().unwrap_or("") != cycles[i].prompt_id
-                        })
+                        .map(|i| entry.prompt_id.as_deref().unwrap_or("") != cycles[i].prompt_id)
                         .unwrap_or(true);
                     if fresh {
                         // A human prompt: open a new cycle.
@@ -649,7 +649,8 @@ pub fn process_session(
             let cycle_id = sub_cycle.map(|ci| cycles[ci].cycle_id.clone());
             match kind {
                 "assistant" => {
-                    let msg = model::extract_assistant_message(entry.message.as_ref(), include_text);
+                    let msg =
+                        model::extract_assistant_message(entry.message.as_ref(), include_text);
                     if let Some(m) = msg.model {
                         if !models.iter().any(|x| x == m) {
                             models.push(m.to_string());
@@ -677,13 +678,19 @@ pub fn process_session(
                             cache_read_tokens: model::usage_i64(u, "cache_read_input_tokens"),
                             cache_write_tokens: model::usage_i64(u, "cache_creation_input_tokens"),
                             cache_write_1h_tokens: model::usage_nested_i64(
-                                u, "cache_creation", "ephemeral_1h_input_tokens",
+                                u,
+                                "cache_creation",
+                                "ephemeral_1h_input_tokens",
                             ),
                             cache_write_5m_tokens: model::usage_nested_i64(
-                                u, "cache_creation", "ephemeral_5m_input_tokens",
+                                u,
+                                "cache_creation",
+                                "ephemeral_5m_input_tokens",
                             ),
                             thinking_tokens: model::usage_nested_i64(
-                                u, "output_tokens_details", "thinking_tokens",
+                                u,
+                                "output_tokens_details",
+                                "thinking_tokens",
                             ),
                             n_tool_uses: 0,
                             n_text_blocks: 0,
@@ -748,7 +755,9 @@ pub fn process_session(
                 "user" => {
                     let content = model::extract_user_content(entry.message.as_ref());
                     for tr in &content.tool_results {
-                        let Some(&ti) = sub_tool_index.get(tr.tool_use_id) else { continue };
+                        let Some(&ti) = sub_tool_index.get(tr.tool_use_id) else {
+                            continue;
+                        };
                         let tc = &mut out.tool_calls[ti];
                         if let Some(t) = ts {
                             tc.duration_ms = Some((t - tc.ts).max(0));
@@ -871,8 +880,12 @@ pub fn process_session(
 
     let n = cycles.len();
     for (i, c) in cycles.iter().enumerate() {
-        let api = per_cycle_api.get(c.cycle_id.as_str()).map_or(&[][..], |v| v);
-        let tools = per_cycle_tools.get(c.cycle_id.as_str()).map_or(&[][..], |v| v);
+        let api = per_cycle_api
+            .get(c.cycle_id.as_str())
+            .map_or(&[][..], |v| v);
+        let tools = per_cycle_tools
+            .get(c.cycle_id.as_str())
+            .map_or(&[][..], |v| v);
         let next_prompt_ts = cycles.get(i + 1).map(|nc| nc.prompt_ts);
         let human_dwell_ms = next_prompt_ts.and_then(|np| {
             let d = (np - c.last_ts).max(0);
@@ -922,8 +935,11 @@ pub fn process_session(
     if entry_idx > 0 {
         let start = start_ts.unwrap_or(0);
         let end = end_ts.unwrap_or(start);
-        let all_files: HashSet<&str> =
-            out.file_touches.iter().map(|f| f.path_sha256.as_str()).collect();
+        let all_files: HashSet<&str> = out
+            .file_touches
+            .iter()
+            .map(|f| f.path_sha256.as_str())
+            .collect();
         out.session = Some(SessionRow {
             session_id: session_id.to_string(),
             project: project.to_string(),
@@ -940,7 +956,11 @@ pub fn process_session(
             n_tool_calls: out.tool_calls.iter().filter(|t| !t.is_sidechain).count() as i32,
             n_tool_errors: out.tool_calls.iter().filter(|t| t.is_error).count() as i32,
             n_denials: out.tool_calls.iter().filter(|t| t.is_denied).count() as i32,
-            n_retries: out.tool_calls.iter().filter(|t| t.retry_of.is_some()).count() as i32,
+            n_retries: out
+                .tool_calls
+                .iter()
+                .filter(|t| t.retry_of.is_some())
+                .count() as i32,
             n_sidechains: out.cycles.iter().map(|c| c.n_sidechains).sum(),
             n_interrupted_cycles: out.cycles.iter().filter(|c| c.interrupted).count() as i32,
             tokens_input: out.api_calls.iter().map(|a| a.input_tokens).sum(),
@@ -1001,7 +1021,13 @@ fn normalized_target(name: &str, input: Option<&Value>, input_json: &str) -> Str
 }
 
 fn trim_ascii(b: &[u8]) -> &[u8] {
-    let start = b.iter().position(|c| !c.is_ascii_whitespace()).unwrap_or(b.len());
-    let end = b.iter().rposition(|c| !c.is_ascii_whitespace()).map_or(start, |e| e + 1);
+    let start = b
+        .iter()
+        .position(|c| !c.is_ascii_whitespace())
+        .unwrap_or(b.len());
+    let end = b
+        .iter()
+        .rposition(|c| !c.is_ascii_whitespace())
+        .map_or(start, |e| e + 1);
     &b[start..end]
 }

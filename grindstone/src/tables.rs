@@ -25,7 +25,13 @@ use crate::session::{ApiCallRow, CycleRow, FileTouchRow, SessionRow, TextRow, To
 pub const SCHEMA_VERSION: &str = "1.0.0";
 pub const GENERATOR_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub const FACT_TABLES: &[&str] = &["sessions", "cycles", "api_calls", "tool_calls", "file_touches"];
+pub const FACT_TABLES: &[&str] = &[
+    "sessions",
+    "cycles",
+    "api_calls",
+    "tool_calls",
+    "file_touches",
+];
 
 fn ts_builder() -> TimestampMillisecondBuilder {
     TimestampMillisecondBuilder::new().with_timezone("UTC")
@@ -44,8 +50,12 @@ macro_rules! finish {
 }
 
 pub fn sessions_batch(rows: &[SessionRow]) -> Result<RecordBatch> {
-    let (mut session_id, mut project, mut cwd, mut git_branch) =
-        (StringBuilder::new(), StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
+    let (mut session_id, mut project, mut cwd, mut git_branch) = (
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+    );
     let (mut entrypoint, mut cli_version) = (dict(), dict());
     let (mut start_ts, mut end_ts) = (ts_builder(), ts_builder());
     let mut is_complete = BooleanBuilder::new();
@@ -94,15 +104,36 @@ pub fn sessions_batch(rows: &[SessionRow]) -> Result<RecordBatch> {
         overlap.append_value(r.overlap_sessions);
     }
     let mut it = i32s.into_iter();
-    let (mut n_cycles, mut n_api, mut n_tool, mut n_err, mut n_den, mut n_ret, mut n_side, mut n_int, mut files) = (
-        it.next().unwrap(), it.next().unwrap(), it.next().unwrap(), it.next().unwrap(),
-        it.next().unwrap(), it.next().unwrap(), it.next().unwrap(), it.next().unwrap(),
+    let (
+        mut n_cycles,
+        mut n_api,
+        mut n_tool,
+        mut n_err,
+        mut n_den,
+        mut n_ret,
+        mut n_side,
+        mut n_int,
+        mut files,
+    ) = (
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
         it.next().unwrap(),
     );
     let mut it = i64s.into_iter();
     let (mut t_in, mut t_out, mut t_cr, mut t_cw, mut t_th, mut wall, mut active) = (
-        it.next().unwrap(), it.next().unwrap(), it.next().unwrap(), it.next().unwrap(),
-        it.next().unwrap(), it.next().unwrap(), it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
     );
     Ok(finish![
         "session_id" => session_id, "project" => project, "cwd" => cwd,
@@ -120,13 +151,20 @@ pub fn sessions_batch(rows: &[SessionRow]) -> Result<RecordBatch> {
 }
 
 pub fn cycles_batch(rows: &[CycleRow]) -> Result<RecordBatch> {
-    let (mut cycle_id, mut session_id, mut prompt_id, mut prompt_sha256) =
-        (StringBuilder::new(), StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
+    let (mut cycle_id, mut session_id, mut prompt_id, mut prompt_sha256) = (
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+    );
     let mut prompt_ts = ts_builder();
     let (mut prompt_kind, mut ended_by) = (dict(), dict());
     let mut prompt_chars = Int64Builder::new();
-    let (mut first_response_ms, mut agent_active_ms, mut human_dwell_ms) =
-        (Int64Builder::new(), Int64Builder::new(), Int64Builder::new());
+    let (mut first_response_ms, mut agent_active_ms, mut human_dwell_ms) = (
+        Int64Builder::new(),
+        Int64Builder::new(),
+        Int64Builder::new(),
+    );
     let mut i32s: Vec<Int32Builder> = (0..9).map(|_| Int32Builder::new()).collect();
     let mut interrupted = BooleanBuilder::new();
     let mut i64s: Vec<Int64Builder> = (0..5).map(|_| Int64Builder::new()).collect();
@@ -142,14 +180,24 @@ pub fn cycles_batch(rows: &[CycleRow]) -> Result<RecordBatch> {
         agent_active_ms.append_value(r.agent_active_ms);
         human_dwell_ms.append_option(r.human_dwell_ms);
         for (b, v) in i32s.iter_mut().zip([
-            r.n_api_calls, r.n_tool_calls, r.n_tool_errors, r.n_denials, r.n_retries,
-            r.n_sidechains, r.sidechain_tool_calls, r.files_touched, r.files_retouched,
+            r.n_api_calls,
+            r.n_tool_calls,
+            r.n_tool_errors,
+            r.n_denials,
+            r.n_retries,
+            r.n_sidechains,
+            r.sidechain_tool_calls,
+            r.files_touched,
+            r.files_retouched,
         ]) {
             b.append_value(v);
         }
         interrupted.append_value(r.interrupted);
         for (b, v) in i64s.iter_mut().zip([
-            r.tokens_input, r.tokens_output, r.tokens_cache_read, r.tokens_cache_write,
+            r.tokens_input,
+            r.tokens_output,
+            r.tokens_cache_read,
+            r.tokens_cache_write,
             r.tokens_thinking,
         ]) {
             b.append_value(v);
@@ -157,14 +205,33 @@ pub fn cycles_batch(rows: &[CycleRow]) -> Result<RecordBatch> {
         ended_by.append_value(r.ended_by);
     }
     let mut it = i32s.into_iter();
-    let (mut n_api, mut n_tool, mut n_err, mut n_den, mut n_ret, mut n_side, mut side_tools, mut files, mut refiles) = (
-        it.next().unwrap(), it.next().unwrap(), it.next().unwrap(), it.next().unwrap(),
-        it.next().unwrap(), it.next().unwrap(), it.next().unwrap(), it.next().unwrap(),
+    let (
+        mut n_api,
+        mut n_tool,
+        mut n_err,
+        mut n_den,
+        mut n_ret,
+        mut n_side,
+        mut side_tools,
+        mut files,
+        mut refiles,
+    ) = (
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
         it.next().unwrap(),
     );
     let mut it = i64s.into_iter();
     let (mut t_in, mut t_out, mut t_cr, mut t_cw, mut t_th) = (
-        it.next().unwrap(), it.next().unwrap(), it.next().unwrap(), it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
         it.next().unwrap(),
     );
     Ok(finish![
@@ -185,8 +252,11 @@ pub fn cycles_batch(rows: &[CycleRow]) -> Result<RecordBatch> {
 }
 
 pub fn api_calls_batch(rows: &[ApiCallRow]) -> Result<RecordBatch> {
-    let (mut request_id, mut session_id, mut cycle_id) =
-        (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
+    let (mut request_id, mut session_id, mut cycle_id) = (
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+    );
     let mut ts = ts_builder();
     let (mut model, mut effort, mut service_tier, mut speed, mut stop_reason) =
         (dict(), dict(), dict(), dict(), dict());
@@ -203,8 +273,13 @@ pub fn api_calls_batch(rows: &[ApiCallRow]) -> Result<RecordBatch> {
         speed.append_option(r.speed.as_deref());
         stop_reason.append_value(&r.stop_reason);
         for (b, v) in i64s.iter_mut().zip([
-            r.input_tokens, r.output_tokens, r.cache_read_tokens, r.cache_write_tokens,
-            r.cache_write_1h_tokens, r.cache_write_5m_tokens, r.thinking_tokens,
+            r.input_tokens,
+            r.output_tokens,
+            r.cache_read_tokens,
+            r.cache_write_tokens,
+            r.cache_write_1h_tokens,
+            r.cache_write_5m_tokens,
+            r.thinking_tokens,
         ]) {
             b.append_value(v);
         }
@@ -213,8 +288,13 @@ pub fn api_calls_batch(rows: &[ApiCallRow]) -> Result<RecordBatch> {
     }
     let mut it = i64s.into_iter();
     let (mut t_in, mut t_out, mut t_cr, mut t_cw, mut t_cw1, mut t_cw5, mut t_th) = (
-        it.next().unwrap(), it.next().unwrap(), it.next().unwrap(), it.next().unwrap(),
-        it.next().unwrap(), it.next().unwrap(), it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
+        it.next().unwrap(),
     );
     Ok(finish![
         "request_id" => request_id, "session_id" => session_id, "cycle_id" => cycle_id,
@@ -229,17 +309,34 @@ pub fn api_calls_batch(rows: &[ApiCallRow]) -> Result<RecordBatch> {
 }
 
 pub fn tool_calls_batch(rows: &[ToolCallRow]) -> Result<RecordBatch> {
-    let (mut tool_call_id, mut session_id, mut cycle_id, mut event_uuid, mut tool_name, mut retry_of) = (
-        StringBuilder::new(), StringBuilder::new(), StringBuilder::new(),
-        StringBuilder::new(), StringBuilder::new(), StringBuilder::new(),
+    let (
+        mut tool_call_id,
+        mut session_id,
+        mut cycle_id,
+        mut event_uuid,
+        mut tool_name,
+        mut retry_of,
+    ) = (
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
     );
     let mut ts = ts_builder();
     let mut tool_category = dict();
     let (mut is_sidechain, mut is_error, mut is_denied, mut is_interrupted) = (
-        BooleanBuilder::new(), BooleanBuilder::new(), BooleanBuilder::new(), BooleanBuilder::new(),
+        BooleanBuilder::new(),
+        BooleanBuilder::new(),
+        BooleanBuilder::new(),
+        BooleanBuilder::new(),
     );
-    let (mut duration_ms, mut input_bytes, mut result_bytes) =
-        (Int64Builder::new(), Int64Builder::new(), Int64Builder::new());
+    let (mut duration_ms, mut input_bytes, mut result_bytes) = (
+        Int64Builder::new(),
+        Int64Builder::new(),
+        Int64Builder::new(),
+    );
     for r in rows {
         tool_call_id.append_value(&r.tool_call_id);
         session_id.append_value(&r.session_id);
@@ -270,7 +367,10 @@ pub fn tool_calls_batch(rows: &[ToolCallRow]) -> Result<RecordBatch> {
 
 pub fn file_touches_batch(rows: &[FileTouchRow]) -> Result<RecordBatch> {
     let (mut session_id, mut cycle_id, mut path_sha256, mut path) = (
-        StringBuilder::new(), StringBuilder::new(), StringBuilder::new(), StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
     );
     let mut ts = ts_builder();
     let (mut ext, mut op) = (dict(), dict());
@@ -291,8 +391,11 @@ pub fn file_touches_batch(rows: &[FileTouchRow]) -> Result<RecordBatch> {
 
 pub fn texts_batch(rows: &[TextRow]) -> Result<RecordBatch> {
     let (mut event_uuid, mut session_id, mut cycle_id, mut kind, mut text) = (
-        StringBuilder::new(), StringBuilder::new(), StringBuilder::new(),
-        StringBuilder::new(), StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
     );
     let mut seq = Int32Builder::new();
     let mut ts = ts_builder();
@@ -319,8 +422,14 @@ pub fn write_parquet(path: &Path, batch: &RecordBatch) -> Result<()> {
     let props = WriterProperties::builder()
         .set_compression(Compression::SNAPPY)
         .set_key_value_metadata(Some(vec![
-            KeyValue::new("grindstone.schema_version".to_string(), SCHEMA_VERSION.to_string()),
-            KeyValue::new("grindstone.generator_version".to_string(), GENERATOR_VERSION.to_string()),
+            KeyValue::new(
+                "grindstone.schema_version".to_string(),
+                SCHEMA_VERSION.to_string(),
+            ),
+            KeyValue::new(
+                "grindstone.generator_version".to_string(),
+                GENERATOR_VERSION.to_string(),
+            ),
         ]))
         .build();
     let file = File::create(path).with_context(|| format!("creating {}", path.display()))?;

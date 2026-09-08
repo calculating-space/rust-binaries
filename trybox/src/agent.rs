@@ -9,14 +9,28 @@ pub fn briefing(m: &Manifest, r: &Recipe) -> String {
     out.push_str(&format!("# trybox sandbox `{}`\n\n", m.name));
     out.push_str("You are the resident agent of a disposable experiment environment. Your job: wait for instructions, propose concrete experiments, run them when asked, and report numbers plainly. Everything you do stays inside this sandbox and is deleted with `trybox destroy`.\n\n");
     out.push_str("## Environment\n\n");
-    out.push_str(&format!("- Backend: {}\n- Recipe: {} ({})\n- Python: {}\n", m.backend.as_str(), r.name, r.summary, m.python));
+    out.push_str(&format!(
+        "- Backend: {}\n- Recipe: {} ({})\n- Python: {}\n",
+        m.backend.as_str(),
+        r.name,
+        r.summary,
+        m.python
+    ));
     if m.packages.is_empty() {
         out.push_str("- Packages: none preinstalled\n");
     } else {
         out.push_str(&format!("- Packages: {}\n", m.packages.join(", ")));
     }
-    out.push_str(&format!("- Host: {} on {}, {} GB memory, {}\n", m.host.chip, m.host.os, m.host.memory_gb, m.host.arch));
-    out.push_str(&format!("- Sandbox dir: {}\n- Working dir (you are here): {}\n- Model cache (HF_HOME): {}\n\n", m.dir.display(), m.work_dir().display(), m.hf_dir().display()));
+    out.push_str(&format!(
+        "- Host: {} on {}, {} GB memory, {}\n",
+        m.host.chip, m.host.os, m.host.memory_gb, m.host.arch
+    ));
+    out.push_str(&format!(
+        "- Sandbox dir: {}\n- Working dir (you are here): {}\n- Model cache (HF_HOME): {}\n\n",
+        m.dir.display(),
+        m.work_dir().display(),
+        m.hf_dir().display()
+    ));
     out.push_str("## How to run things\n\n");
     match m.backend {
         Backend::Docker => out.push_str(&format!(
@@ -31,7 +45,10 @@ pub fn briefing(m: &Manifest, r: &Recipe) -> String {
     out.push_str(&format!("\n\nRepo: {}\n\n", r.repo));
     out.push_str("## Known-good commands\n\nThese come from the recipe, ordered from hello world to advanced. Each is a shell command valid in this environment; the user may already have run some via `trybox explore`.\n\n");
     for (i, e) in std::iter::once(&r.hello).chain(r.tour.iter()).enumerate() {
-        out.push_str(&format!("{}. {} — {}\n```sh\n{}\n```\nExpect: {}\n\n", i, e.title, e.learn, e.run, e.expect));
+        out.push_str(&format!(
+            "{}. {} — {}\n```sh\n{}\n```\nExpect: {}\n\n",
+            i, e.title, e.learn, e.run, e.expect
+        ));
     }
     if !r.suggestions.is_empty() {
         out.push_str("## Suggested experiments\n\n");
@@ -58,13 +75,24 @@ pub const DEFAULT_PROMPT: &str = "The environment is ready. Read CLAUDE.md, conf
 /// What the user has already done in this sandbox, for the agent's system prompt.
 pub fn progress_note(m: &Manifest) -> String {
     let p = crate::progress::Progress::load(&m.dir);
-    let Ok(r) = crate::recipe::recipe(&m.recipe) else { return String::new() };
-    let done: Vec<&str> = r.tour.iter().enumerate().filter(|(i, _)| p.done(*i)).map(|(_, e)| e.title).collect();
+    let Ok(r) = crate::recipe::recipe(&m.recipe) else {
+        return String::new();
+    };
+    let done: Vec<&str> = r
+        .tour
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| p.done(*i))
+        .map(|(_, e)| e.title)
+        .collect();
     let hello = p.hello.as_ref().is_some_and(|h| h.ok);
     match (hello, done.is_empty()) {
         (false, true) => " The user has not run anything here yet.".to_string(),
         (true, true) => " The user has run the hello world and nothing else yet.".to_string(),
-        _ => format!(" The user has already completed these tour steps, so do not repeat them unless asked: {}.", done.join("; ")),
+        _ => format!(
+            " The user has already completed these tour steps, so do not repeat them unless asked: {}.",
+            done.join("; ")
+        ),
     }
 }
 

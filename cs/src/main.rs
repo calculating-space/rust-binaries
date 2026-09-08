@@ -5,17 +5,32 @@ use std::process::{Command, ExitCode};
 fn build(t: &Tool) -> Result<(), String> {
     eprintln!("cs: building {} (first use)", t.name);
     let argv = build_command(t);
-    let status = Command::new(&argv[0]).args(&argv[1..]).status().map_err(|e| format!("cannot run cargo: {e}"))?;
-    if status.success() { Ok(()) } else { Err(format!("build of {} failed ({status})", t.name)) }
+    let status = Command::new(&argv[0])
+        .args(&argv[1..])
+        .status()
+        .map_err(|e| format!("cannot run cargo: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("build of {} failed ({status})", t.name))
+    }
 }
 
 fn ensure_built(root: &std::path::Path, name: &str) -> Result<Tool, String> {
-    let t = tool(root, name).ok_or_else(|| format!("no tool named {name:?} in {}\n{}", root.display(), listing(root)))?;
+    let t = tool(root, name).ok_or_else(|| {
+        format!(
+            "no tool named {name:?} in {}\n{}",
+            root.display(),
+            listing(root)
+        )
+    })?;
     if t.binary.is_some() {
         return Ok(t);
     }
     build(&t)?;
-    tool(root, name).filter(|t| t.binary.is_some()).ok_or_else(|| format!("built {name} but no binary appeared"))
+    tool(root, name)
+        .filter(|t| t.binary.is_some())
+        .ok_or_else(|| format!("built {name} but no binary appeared"))
 }
 
 fn run() -> Result<ExitCode, String> {
@@ -42,14 +57,20 @@ fn run() -> Result<ExitCode, String> {
             }
         }
         Some("--build") => {
-            let names: Vec<String> = if args.len() > 1 { args[1..].to_vec() } else { cs::tools(&root).into_iter().map(|t| t.name).collect() };
+            let names: Vec<String> = if args.len() > 1 {
+                args[1..].to_vec()
+            } else {
+                cs::tools(&root).into_iter().map(|t| t.name).collect()
+            };
             for n in names {
                 let t = tool(&root, &n).ok_or_else(|| format!("no tool named {n:?}"))?;
                 build(&t)?;
             }
             Ok(ExitCode::SUCCESS)
         }
-        Some(name) if name.starts_with('-') => Err(format!("unknown option {name}; try `cs` for the list")),
+        Some(name) if name.starts_with('-') => {
+            Err(format!("unknown option {name}; try `cs` for the list"))
+        }
         Some(name) => {
             let t = ensure_built(&root, name)?;
             let bin = t.binary.expect("ensured");

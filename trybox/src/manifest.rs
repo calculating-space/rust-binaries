@@ -21,9 +21,30 @@ pub struct Manifest {
 }
 
 impl Manifest {
-    pub fn new(name: &str, backend: Backend, recipe: &str, python: &str, packages: Vec<String>, dir: PathBuf, host: HostInfo) -> Self {
-        let created_unix = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-        Self { version: 1, name: name.to_string(), backend, recipe: recipe.to_string(), python: python.to_string(), packages, created_unix, dir, host }
+    pub fn new(
+        name: &str,
+        backend: Backend,
+        recipe: &str,
+        python: &str,
+        packages: Vec<String>,
+        dir: PathBuf,
+        host: HostInfo,
+    ) -> Self {
+        let created_unix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        Self {
+            version: 1,
+            name: name.to_string(),
+            backend,
+            recipe: recipe.to_string(),
+            python: python.to_string(),
+            packages,
+            created_unix,
+            dir,
+            host,
+        }
     }
 
     pub fn path(&self) -> PathBuf {
@@ -58,14 +79,17 @@ impl Manifest {
 
 pub fn load(root: &Path, name: &str) -> Result<Manifest, String> {
     let path = root.join(name).join(MANIFEST_FILE);
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("no sandbox {name:?} at {}: {e}", path.display()))?;
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| format!("no sandbox {name:?} at {}: {e}", path.display()))?;
     serde_json::from_str(&text).map_err(|e| format!("corrupt manifest {}: {e}", path.display()))
 }
 
 /// Every sandbox under the root, sorted by name. Directories without a manifest are skipped.
 pub fn list(root: &Path) -> Result<Vec<Manifest>, String> {
     let mut out = Vec::new();
-    let Ok(entries) = std::fs::read_dir(root) else { return Ok(out) };
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return Ok(out);
+    };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         if let Ok(m) = load(root, &name) {

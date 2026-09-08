@@ -22,14 +22,20 @@ pub fn run(root: &Path, out: &Path) -> Result<()> {
     let mut warnings = 0u32;
 
     let Some(manifest) = Manifest::load(out)? else {
-        bail!("no manifest.json in {} — run `grindstone scan` first", out.display());
+        bail!(
+            "no manifest.json in {} — run `grindstone scan` first",
+            out.display()
+        );
     };
 
     // schema version
     let major = manifest.schema_version.split('.').next().unwrap_or("");
     let expected_major = tables::SCHEMA_VERSION.split('.').next().unwrap();
     if major != expected_major {
-        println!("FAIL  schema_version {} (this build knows major {})", manifest.schema_version, expected_major);
+        println!(
+            "FAIL  schema_version {} (this build knows major {})",
+            manifest.schema_version, expected_major
+        );
         problems += 1;
     } else {
         println!("ok    schema_version {}", manifest.schema_version);
@@ -91,8 +97,10 @@ pub fn run(root: &Path, out: &Path) -> Result<()> {
     for (name, dir) in all_tables {
         let mut files = Vec::new();
         collect_parquet(&dir, &mut files)?;
-        let infos: Vec<Result<(i64, bool)>> =
-            files.par_iter().map(|f| tables::parquet_footer_info(f)).collect();
+        let infos: Vec<Result<(i64, bool)>> = files
+            .par_iter()
+            .map(|f| tables::parquet_footer_info(f))
+            .collect();
         let mut rows = 0i64;
         let mut bad = 0u64;
         let mut unstamped = 0u64;

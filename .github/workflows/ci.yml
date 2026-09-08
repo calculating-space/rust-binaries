@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: ${{ matrix.package }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        package: [cs, speccheck, trybox, grindstone]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ matrix.package }}
+      # trybox's tests create real uv environments
+      - uses: astral-sh/setup-uv@v5
+        if: matrix.package == 'trybox'
+      - name: fmt
+        run: cargo fmt --manifest-path ${{ matrix.package }}/Cargo.toml --check
+      - name: clippy
+        run: cargo clippy --manifest-path ${{ matrix.package }}/Cargo.toml --all-targets --locked -- -D warnings
+      - name: test
+        run: cargo test --manifest-path ${{ matrix.package }}/Cargo.toml --locked

@@ -22,16 +22,23 @@ pub struct Progress {
 }
 
 pub fn now() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 impl Progress {
     pub fn load(sandbox_dir: &Path) -> Progress {
-        std::fs::read_to_string(sandbox_dir.join(PROGRESS_FILE)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+        std::fs::read_to_string(sandbox_dir.join(PROGRESS_FILE))
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
     }
     pub fn save(&self, sandbox_dir: &Path) -> Result<(), String> {
         let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        std::fs::write(sandbox_dir.join(PROGRESS_FILE), json + "\n").map_err(|e| format!("write progress: {e}"))
+        std::fs::write(sandbox_dir.join(PROGRESS_FILE), json + "\n")
+            .map_err(|e| format!("write progress: {e}"))
     }
     pub fn record(&mut self, step: Option<usize>, ok: bool) {
         let run = Run { ok, at_unix: now() };
@@ -50,7 +57,11 @@ impl Progress {
     }
     /// Most recent activity, if any.
     pub fn last_unix(&self) -> Option<u64> {
-        self.hello.iter().chain(self.steps.values()).map(|r| r.at_unix).max()
+        self.hello
+            .iter()
+            .chain(self.steps.values())
+            .map(|r| r.at_unix)
+            .max()
     }
     /// "not started", "hello world", "hello + 3/10 steps"
     pub fn summary(&self, total_steps: usize) -> String {
@@ -76,5 +87,9 @@ pub fn ago(then_unix: u64) -> String {
 
 pub fn gb(bytes: u64) -> String {
     let g = bytes as f64 / (1u64 << 30) as f64;
-    if g < 0.1 { format!("{} MB", bytes >> 20) } else { format!("{g:.1} GB") }
+    if g < 0.1 {
+        format!("{} MB", bytes >> 20)
+    } else {
+        format!("{g:.1} GB")
+    }
 }

@@ -51,12 +51,24 @@ pub struct Spec {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Check {
     /// Allowed (os, arch) pairs.
-    Platform { any_of: Vec<(String, String)> },
-    Gpu { any_of: Vec<GpuKind> },
-    Tool { name: String },
-    MinMemoryGb { gb: u64 },
-    MinDiskFreeGb { gb: u64 },
-    MinCores { n: u32 },
+    Platform {
+        any_of: Vec<(String, String)>,
+    },
+    Gpu {
+        any_of: Vec<GpuKind>,
+    },
+    Tool {
+        name: String,
+    },
+    MinMemoryGb {
+        gb: u64,
+    },
+    MinDiskFreeGb {
+        gb: u64,
+    },
+    MinCores {
+        n: u32,
+    },
 }
 
 /// What failing a rule means.
@@ -103,7 +115,13 @@ impl Requirements {
             .iter()
             .map(|r| &r.check)
             .chain(self.tiers.iter().flat_map(|t| t.checks.iter()))
-            .filter_map(|c| if let Check::Tool { name } = c { Some(name.clone()) } else { None })
+            .filter_map(|c| {
+                if let Check::Tool { name } = c {
+                    Some(name.clone())
+                } else {
+                    None
+                }
+            })
             .collect();
         names.sort();
         names.dedup();
@@ -160,8 +178,19 @@ pub struct Verdict {
 /// Human wording of a check, for tables.
 pub fn need(c: &Check) -> String {
     match c {
-        Check::Platform { any_of } => any_of.iter().map(|(o, a)| format!("{o}/{a}")).collect::<Vec<_>>().join(" or "),
-        Check::Gpu { any_of } => format!("{} GPU", any_of.iter().map(|k| format!("{k:?}").to_lowercase()).collect::<Vec<_>>().join(" or ")),
+        Check::Platform { any_of } => any_of
+            .iter()
+            .map(|(o, a)| format!("{o}/{a}"))
+            .collect::<Vec<_>>()
+            .join(" or "),
+        Check::Gpu { any_of } => format!(
+            "{} GPU",
+            any_of
+                .iter()
+                .map(|k| format!("{k:?}").to_lowercase())
+                .collect::<Vec<_>>()
+                .join(" or ")
+        ),
         Check::Tool { name } => format!("`{name}` installed"),
         Check::MinMemoryGb { gb } => format!("{gb} GB memory"),
         Check::MinDiskFreeGb { gb } => format!("{gb} GB free disk"),
@@ -172,17 +201,34 @@ pub fn need(c: &Check) -> String {
 /// Evaluate one check. Returns pass and what the machine actually has.
 pub fn evaluate(spec: &Spec, c: &Check) -> (bool, String) {
     match c {
-        Check::Platform { any_of } => (any_of.iter().any(|(o, a)| *o == spec.os && *a == spec.arch), format!("{}/{}", spec.os, spec.arch)),
+        Check::Platform { any_of } => (
+            any_of.iter().any(|(o, a)| *o == spec.os && *a == spec.arch),
+            format!("{}/{}", spec.os, spec.arch),
+        ),
         Check::Gpu { any_of } => {
-            let have: Vec<_> = spec.gpus.iter().map(|g| format!("{:?}", g.kind).to_lowercase()).collect();
-            (spec.gpus.iter().any(|g| any_of.contains(&g.kind)), if have.is_empty() { "no GPU".into() } else { have.join(", ") })
+            let have: Vec<_> = spec
+                .gpus
+                .iter()
+                .map(|g| format!("{:?}", g.kind).to_lowercase())
+                .collect();
+            (
+                spec.gpus.iter().any(|g| any_of.contains(&g.kind)),
+                if have.is_empty() {
+                    "no GPU".into()
+                } else {
+                    have.join(", ")
+                },
+            )
         }
         Check::Tool { name } => match spec.tools.get(name) {
             Some(v) => (true, v.clone()),
             None => (false, "not found".into()),
         },
         Check::MinMemoryGb { gb } => (spec.memory_gb >= *gb, format!("{} GB", spec.memory_gb)),
-        Check::MinDiskFreeGb { gb } => (spec.disk_free_gb >= *gb, format!("{} GB free", spec.disk_free_gb)),
+        Check::MinDiskFreeGb { gb } => (
+            spec.disk_free_gb >= *gb,
+            format!("{} GB free", spec.disk_free_gb),
+        ),
         Check::MinCores { n } => (spec.cores >= *n, format!("{} cores", spec.cores)),
     }
 }
@@ -194,10 +240,20 @@ pub fn check(spec: &Spec, req: &Requirements) -> Verdict {
         .iter()
         .map(|r| {
             let (pass, actual) = evaluate(spec, &r.check);
-            Finding { check: r.check.clone(), severity: r.severity, pass, why: r.why.clone(), actual }
+            Finding {
+                check: r.check.clone(),
+                severity: r.severity,
+                pass,
+                why: r.why.clone(),
+                actual,
+            }
         })
         .collect();
-    let worst = findings.iter().filter(|f| !f.pass).map(|f| f.severity).max();
+    let worst = findings
+        .iter()
+        .filter(|f| !f.pass)
+        .map(|f| f.severity)
+        .max();
     let outcome = match worst {
         Some(Severity::Blocks) => Outcome::CannotRun,
         Some(Severity::Pointless) => Outcome::Pointless,
@@ -207,11 +263,27 @@ pub fn check(spec: &Spec, req: &Requirements) -> Verdict {
         .tiers
         .iter()
         .map(|t| {
-            let missing: Vec<String> = t.checks.iter().filter(|c| !evaluate(spec, c).0).map(need).collect();
-            TierResult { name: t.name.clone(), enables: t.enables.clone(), ok: missing.is_empty(), missing }
+            let missing: Vec<String> = t
+                .checks
+                .iter()
+                .filter(|c| !evaluate(spec, c).0)
+                .map(need)
+                .collect();
+            TierResult {
+                name: t.name.clone(),
+                enables: t.enables.clone(),
+                ok: missing.is_empty(),
+                missing,
+            }
         })
         .collect();
-    Verdict { version: CONTRACT_VERSION, subject: req.subject.clone(), outcome, findings, tiers }
+    Verdict {
+        version: CONTRACT_VERSION,
+        subject: req.subject.clone(),
+        outcome,
+        findings,
+        tiers,
+    }
 }
 
 /// Plain-text rendering: a verdict line, a rule table, and a tier list.
@@ -223,8 +295,17 @@ pub fn render(v: &Verdict) -> String {
         Outcome::CannotRun => "CANNOT RUN",
     };
     out.push_str(&format!("{}: {headline}\n\n", v.subject));
-    let width = v.findings.iter().map(|f| need(&f.check).len()).max().unwrap_or(4).max(4);
-    out.push_str(&format!("  {:<3} {:<width$}  {:<12} {:<14} {}\n", "", "NEED", "SEVERITY", "THIS MACHINE", "WHY"));
+    let width = v
+        .findings
+        .iter()
+        .map(|f| need(&f.check).len())
+        .max()
+        .unwrap_or(4)
+        .max(4);
+    out.push_str(&format!(
+        "  {:<3} {:<width$}  {:<12} {:<14} {}\n",
+        "", "NEED", "SEVERITY", "THIS MACHINE", "WHY"
+    ));
     for f in &v.findings {
         let mark = if f.pass { "ok" } else { "--" };
         let sev = match f.severity {
@@ -232,8 +313,16 @@ pub fn render(v: &Verdict) -> String {
             Severity::Pointless => "pointless",
             Severity::Recommended => "recommended",
         };
-        let actual: String = if f.actual.chars().count() > 14 { format!("{}…", f.actual.chars().take(13).collect::<String>()) } else { f.actual.clone() };
-        out.push_str(&format!("  {mark:<3} {:<width$}  {sev:<12} {actual:<14} {}\n", need(&f.check), f.why));
+        let actual: String = if f.actual.chars().count() > 14 {
+            format!("{}…", f.actual.chars().take(13).collect::<String>())
+        } else {
+            f.actual.clone()
+        };
+        out.push_str(&format!(
+            "  {mark:<3} {:<width$}  {sev:<12} {actual:<14} {}\n",
+            need(&f.check),
+            f.why
+        ));
     }
     if !v.tiers.is_empty() {
         out.push_str("\n  TIERS\n");
@@ -241,7 +330,12 @@ pub fn render(v: &Verdict) -> String {
             if t.ok {
                 out.push_str(&format!("  ok  {:<28} {}\n", t.name, t.enables));
             } else {
-                out.push_str(&format!("  --  {:<28} {} (needs {})\n", t.name, t.enables, t.missing.join(", ")));
+                out.push_str(&format!(
+                    "  --  {:<28} {} (needs {})\n",
+                    t.name,
+                    t.enables,
+                    t.missing.join(", ")
+                ));
             }
         }
     }

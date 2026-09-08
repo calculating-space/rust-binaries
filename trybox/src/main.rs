@@ -2,10 +2,16 @@ use clap::{Parser, Subcommand};
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
-use trybox::{Backend, Manifest, agent, backend, default_root, doctor, host_info, list, load, recipe, validate_name};
+use trybox::{
+    Backend, Manifest, agent, backend, default_root, doctor, host_info, list, load, recipe,
+    validate_name,
+};
 
 #[derive(Parser)]
-#[command(version, about = "Disposable experiment environments with an agent inside. Create, run, destroy.")]
+#[command(
+    version,
+    about = "Disposable experiment environments with an agent inside. Create, run, destroy."
+)]
 struct Cli {
     /// Directory holding all sandboxes. Default: $TRYBOX_ROOT or ~/.trybox
     #[arg(long, global = true)]
@@ -122,7 +128,10 @@ fn page(text: &str, no_pager: bool) {
         let pager = std::env::var("PAGER").unwrap_or_else(|_| "less -R".into());
         let mut parts = pager.split_whitespace();
         if let Some(bin) = parts.next()
-            && let Ok(mut child) = Command::new(bin).args(parts).stdin(std::process::Stdio::piped()).spawn()
+            && let Ok(mut child) = Command::new(bin)
+                .args(parts)
+                .stdin(std::process::Stdio::piped())
+                .spawn()
         {
             if let Some(mut stdin) = child.stdin.take() {
                 let _ = stdin.write_all(text.as_bytes());
@@ -136,8 +145,14 @@ fn page(text: &str, no_pager: bool) {
 
 fn notify(title: &str, body: &str) {
     if cfg!(target_os = "macos") {
-        let script = format!("display notification \"{}\" with title \"{}\"", body.replace('"', "'"), title.replace('"', "'"));
-        let _ = Command::new("/usr/bin/osascript").args(["-e", &script]).status();
+        let script = format!(
+            "display notification \"{}\" with title \"{}\"",
+            body.replace('"', "'"),
+            title.replace('"', "'")
+        );
+        let _ = Command::new("/usr/bin/osascript")
+            .args(["-e", &script])
+            .status();
     }
 }
 
@@ -156,11 +171,22 @@ fn run(cli: Cli) -> Result<ExitCode, String> {
         Cmd::Doctor { json } => {
             let report = doctor();
             if json {
-                println!("{}", serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
+                );
             } else {
-                println!("host: {} ({} GB, {} {})", report.host.chip, report.host.memory_gb, report.host.os, report.host.arch);
+                println!(
+                    "host: {} ({} GB, {} {})",
+                    report.host.chip, report.host.memory_gb, report.host.os, report.host.arch
+                );
                 for t in &report.tools {
-                    println!("{:<14} {} {}", t.name, if t.available { "ok  " } else { "MISSING" }, t.detail);
+                    println!(
+                        "{:<14} {} {}",
+                        t.name,
+                        if t.available { "ok  " } else { "MISSING" },
+                        t.detail
+                    );
                 }
                 for n in &report.notes {
                     println!("note: {n}");
@@ -168,36 +194,66 @@ fn run(cli: Cli) -> Result<ExitCode, String> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        Cmd::Recipes { name, json, requirements, no_pager } => {
+        Cmd::Recipes {
+            name,
+            json,
+            requirements,
+            no_pager,
+        } => {
             match name {
                 Some(n) => {
                     let r = recipe(&n)?;
                     if requirements {
-                        println!("{}", serde_json::to_string_pretty(&(r.requirements)()).map_err(|e| e.to_string())?);
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&(r.requirements)())
+                                .map_err(|e| e.to_string())?
+                        );
                     } else if json {
-                        println!("{}", serde_json::to_string_pretty(r).map_err(|e| e.to_string())?);
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(r).map_err(|e| e.to_string())?
+                        );
                     } else {
                         let verdict = trybox::recipe::check_here(r, &root);
                         page(&trybox::recipe::man(r, Some(&verdict)), no_pager);
                     }
                 }
                 None => {
-                    if json { println!("{}", serde_json::to_string_pretty(trybox::recipe::RECIPES).map_err(|e| e.to_string())?) } else { print!("{}", trybox::recipe::table()) }
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(trybox::recipe::RECIPES)
+                                .map_err(|e| e.to_string())?
+                        )
+                    } else {
+                        print!("{}", trybox::recipe::table())
+                    }
                 }
             }
             Ok(ExitCode::SUCCESS)
         }
-        Cmd::Check { recipe: recipe_name, json } => {
+        Cmd::Check {
+            recipe: recipe_name,
+            json,
+        } => {
             let r = recipe(&recipe_name)?;
             let v = trybox::recipe::check_here(r, &root);
             if json {
-                println!("{}", serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?
+                );
             } else {
                 print!("{}", speccheck::render(&v));
             }
             Ok(ExitCode::from(v.outcome.exit_code()))
         }
-        Cmd::Explore { recipe: recipe_name, sandbox, force } => {
+        Cmd::Explore {
+            recipe: recipe_name,
+            sandbox,
+            force,
+        } => {
             let r = recipe(&recipe_name)?;
             let sandbox = sandbox.unwrap_or_else(|| r.name.to_string());
             validate_name(&sandbox)?;
@@ -205,10 +261,15 @@ fn run(cli: Cli) -> Result<ExitCode, String> {
                 let v = trybox::recipe::check_here(r, &root);
                 match v.outcome {
                     speccheck::Outcome::CanRun => {}
-                    _ if force => eprintln!("warning: requirements not met, continuing because of --force"),
+                    _ if force => {
+                        eprintln!("warning: requirements not met, continuing because of --force")
+                    }
                     speccheck::Outcome::Pointless => {
                         eprint!("{}", speccheck::render(&v));
-                        return Err(format!("{} would run here but not make sense; `trybox explore {} --force` to do it anyway", r.name, r.name));
+                        return Err(format!(
+                            "{} would run here but not make sense; `trybox explore {} --force` to do it anyway",
+                            r.name, r.name
+                        ));
                     }
                     speccheck::Outcome::CannotRun => {
                         eprint!("{}", speccheck::render(&v));
@@ -223,38 +284,76 @@ fn run(cli: Cli) -> Result<ExitCode, String> {
                     Err(format!("cannot launch claude: {err}"))
                 }
                 trybox::explore::Next::Quit => {
-                    println!("sandbox {sandbox} kept; `trybox` or `trybox explore {}` resumes", r.name);
+                    println!(
+                        "sandbox {sandbox} kept; `trybox` or `trybox explore {}` resumes",
+                        r.name
+                    );
                     Ok(ExitCode::SUCCESS)
                 }
                 trybox::explore::Next::Disposed => Ok(ExitCode::SUCCESS),
             }
         }
-        Cmd::Create { name, backend, recipe: recipe_name, extra, python, dry_run, notify: want_notify, agent: launch_agent, quiet } => {
+        Cmd::Create {
+            name,
+            backend,
+            recipe: recipe_name,
+            extra,
+            python,
+            dry_run,
+            notify: want_notify,
+            agent: launch_agent,
+            quiet,
+        } => {
             validate_name(&name)?;
             let r = recipe(&recipe_name)?;
             let be = backend.unwrap_or(r.backend);
             let dir = root.join(&name);
             if dir.exists() && !dry_run {
-                return Err(format!("sandbox {name:?} already exists at {}; destroy it first", dir.display()));
+                return Err(format!(
+                    "sandbox {name:?} already exists at {}; destroy it first",
+                    dir.display()
+                ));
             }
             let mut packages: Vec<String> = r.packages.iter().map(|p| p.to_string()).collect();
             packages.extend(extra);
-            let m = Manifest::new(&name, be, r.name, python.as_deref().unwrap_or(r.python), packages, dir, host_info());
+            let m = Manifest::new(
+                &name,
+                be,
+                r.name,
+                python.as_deref().unwrap_or(r.python),
+                packages,
+                dir,
+                host_info(),
+            );
             let mut plan = backend::prepare(&m);
-            plan.files.push((m.work_dir().join("CLAUDE.md"), agent::briefing(&m, r)));
+            plan.files
+                .push((m.work_dir().join("CLAUDE.md"), agent::briefing(&m, r)));
             if dry_run {
-                println!("{}", serde_json::to_string_pretty(&serde_json::json!({ "manifest": m, "plan": plan })).map_err(|e| e.to_string())?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &serde_json::json!({ "manifest": m, "plan": plan })
+                    )
+                    .map_err(|e| e.to_string())?
+                );
                 return Ok(ExitCode::SUCCESS);
             }
             if be == Backend::Docker && m.host.os == "macos" && !quiet {
-                eprintln!("warning: docker on macOS has no GPU access; GPU benchmarks in this sandbox will be CPU-only");
+                eprintln!(
+                    "warning: docker on macOS has no GPU access; GPU benchmarks in this sandbox will be CPU-only"
+                );
             }
             if let Err(e) = backend::run_plan(&m, &plan, quiet) {
                 let _ = std::fs::remove_dir_all(&m.dir);
                 return Err(e);
             }
             m.save()?;
-            let msg = format!("sandbox {name} ready ({}, {} packages) at {}", be.as_str(), m.packages.len(), m.dir.display());
+            let msg = format!(
+                "sandbox {name} ready ({}, {} packages) at {}",
+                be.as_str(),
+                m.packages.len(),
+                m.dir.display()
+            );
             println!("{msg}");
             println!("next: trybox agent {name}    or    trybox run {name} -- python -V");
             if want_notify {
@@ -269,7 +368,10 @@ fn run(cli: Cli) -> Result<ExitCode, String> {
         Cmd::List { json } => {
             let all = list(&root)?;
             if json {
-                println!("{}", serde_json::to_string_pretty(&all).map_err(|e| e.to_string())?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&all).map_err(|e| e.to_string())?
+                );
             } else {
                 print!("{}", trybox::overview(&all));
             }
@@ -282,12 +384,27 @@ fn run(cli: Cli) -> Result<ExitCode, String> {
         }
         Cmd::Run { name, argv } => {
             let m = load(&root, &name)?;
-            let status = backend::exec_command(&m, &argv).status().map_err(|e| format!("run: {e}"))?;
-            Ok(ExitCode::from(status.code().unwrap_or(1).clamp(0, 255) as u8))
+            let status = backend::exec_command(&m, &argv)
+                .status()
+                .map_err(|e| format!("run: {e}"))?;
+            Ok(ExitCode::from(
+                status.code().unwrap_or(1).clamp(0, 255) as u8
+            ))
         }
-        Cmd::Agent { name, prompt, claude_bin, extra } => {
+        Cmd::Agent {
+            name,
+            prompt,
+            claude_bin,
+            extra,
+        } => {
             let m = load(&root, &name)?;
-            let err = agent::agent_command(&m, &claude_bin, prompt.as_deref().unwrap_or(agent::DEFAULT_PROMPT), &extra).exec();
+            let err = agent::agent_command(
+                &m,
+                &claude_bin,
+                prompt.as_deref().unwrap_or(agent::DEFAULT_PROMPT),
+                &extra,
+            )
+            .exec();
             Err(format!("cannot launch {claude_bin}: {err}"))
         }
         Cmd::Dispose { names, all, yes } => {
@@ -297,7 +414,10 @@ fn run(cli: Cli) -> Result<ExitCode, String> {
                 if names.is_empty() {
                     return Err("give sandbox names, or --all".into());
                 }
-                names.iter().map(|n| load(&root, n)).collect::<Result<_, _>>()?
+                names
+                    .iter()
+                    .map(|n| load(&root, n))
+                    .collect::<Result<_, _>>()?
             };
             if targets.is_empty() {
                 println!("nothing to dispose under {}", root.display());
@@ -307,11 +427,21 @@ fn run(cli: Cli) -> Result<ExitCode, String> {
             let gb = total as f64 / (1u64 << 30) as f64;
             if !yes {
                 for m in &targets {
-                    eprintln!("  {:<20} {:<7} {:.2} GB", m.name, m.backend.as_str(), backend::dir_size(&m.dir) as f64 / (1u64 << 30) as f64);
+                    eprintln!(
+                        "  {:<20} {:<7} {:.2} GB",
+                        m.name,
+                        m.backend.as_str(),
+                        backend::dir_size(&m.dir) as f64 / (1u64 << 30) as f64
+                    );
                 }
-                eprint!("dispose {} sandbox(es), freeing {gb:.2} GB? [y/N] ", targets.len());
+                eprint!(
+                    "dispose {} sandbox(es), freeing {gb:.2} GB? [y/N] ",
+                    targets.len()
+                );
                 let mut line = String::new();
-                std::io::stdin().read_line(&mut line).map_err(|e| e.to_string())?;
+                std::io::stdin()
+                    .read_line(&mut line)
+                    .map_err(|e| e.to_string())?;
                 if !matches!(line.trim(), "y" | "Y" | "yes") {
                     println!("kept");
                     return Ok(ExitCode::from(2));
@@ -328,7 +458,11 @@ fn run(cli: Cli) -> Result<ExitCode, String> {
                 }
             }
             println!("freed {gb:.2} GB");
-            Ok(if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS })
+            Ok(if failed {
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            })
         }
     }
 }

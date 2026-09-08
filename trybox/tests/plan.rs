@@ -1,11 +1,22 @@
 use std::path::PathBuf;
-use trybox::{Backend, Manifest, HostInfo, briefing, prepare, recipe, validate_name, list};
+use trybox::{Backend, HostInfo, Manifest, briefing, list, prepare, recipe, validate_name};
 
 fn manifest(backend: Backend, dir: PathBuf) -> Manifest {
     let r = recipe("mlx").unwrap();
-    Manifest::new("t1", backend, "mlx", r.python, r.packages.iter().map(|s| s.to_string()).collect(), dir, HostInfo {
-        os: "macos".into(), arch: "aarch64".into(), chip: "Apple M1 Max".into(), memory_gb: 64,
-    })
+    Manifest::new(
+        "t1",
+        backend,
+        "mlx",
+        r.python,
+        r.packages.iter().map(|s| s.to_string()).collect(),
+        dir,
+        HostInfo {
+            os: "macos".into(),
+            arch: "aarch64".into(),
+            chip: "Apple M1 Max".into(),
+            memory_gb: 64,
+        },
+    )
 }
 
 #[test]
@@ -46,7 +57,15 @@ fn uv_plan_creates_venv_then_installs_inside_sandbox() {
 #[test]
 fn bare_plan_has_no_install_step() {
     let r = recipe("bare").unwrap();
-    let m = Manifest::new("b", Backend::Venv, "bare", r.python, vec![], PathBuf::from("/s/b"), HostInfo::default());
+    let m = Manifest::new(
+        "b",
+        Backend::Venv,
+        "bare",
+        r.python,
+        vec![],
+        PathBuf::from("/s/b"),
+        HostInfo::default(),
+    );
     let plan = prepare(&m);
     assert_eq!(plan.steps.len(), 1);
     assert_eq!(plan.steps[0].program, "python3");
@@ -57,8 +76,15 @@ fn docker_plan_builds_tagged_image_from_generated_dockerfile() {
     let m = manifest(Backend::Docker, PathBuf::from("/s/t1"));
     let plan = prepare(&m);
     assert_eq!(plan.steps.len(), 1);
-    assert_eq!(plan.steps[0].args, ["build", "-t", "trybox/t1", "/s/t1/docker"]);
-    let df = plan.files.iter().find(|(p, _)| p.ends_with("Dockerfile")).unwrap();
+    assert_eq!(
+        plan.steps[0].args,
+        ["build", "-t", "trybox/t1", "/s/t1/docker"]
+    );
+    let df = plan
+        .files
+        .iter()
+        .find(|(p, _)| p.ends_with("Dockerfile"))
+        .unwrap();
     assert!(df.1.starts_with("FROM python:3.12-slim"));
     assert!(df.1.contains("pip install --no-cache-dir mlx mlx-lm huggingface_hub"));
     let x = plan.files.iter().find(|(p, _)| p.ends_with("x")).unwrap();
@@ -103,28 +129,65 @@ fn manifest_roundtrips_and_lists() {
 /// Real end-to-end with the venv backend and no packages: cheap, needs only python3.
 #[test]
 fn venv_sandbox_end_to_end() {
-    if std::process::Command::new("python3").arg("--version").output().is_err() {
+    if std::process::Command::new("python3")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
         eprintln!("skipping: python3 missing");
         return;
     }
     let tmp = tempfile::tempdir().unwrap();
     let r = recipe("bare").unwrap();
-    let m = Manifest::new("e2e", Backend::Venv, "bare", r.python, vec![], tmp.path().join("e2e"), HostInfo::default());
+    let m = Manifest::new(
+        "e2e",
+        Backend::Venv,
+        "bare",
+        r.python,
+        vec![],
+        tmp.path().join("e2e"),
+        HostInfo::default(),
+    );
     let mut plan = prepare(&m);
-    plan.files.push((m.work_dir().join("CLAUDE.md"), briefing(&m, r)));
+    plan.files
+        .push((m.work_dir().join("CLAUDE.md"), briefing(&m, r)));
     trybox::run_plan(&m, &plan, true).unwrap();
     m.save().unwrap();
     assert!(m.venv_dir().join("bin/python").exists());
     assert!(m.work_dir().join("CLAUDE.md").exists());
 
-    let out = trybox::exec_command(&m, &["python".into(), "-c".into(), "import os,sys;print(sys.prefix);print(os.environ['HF_HOME']);print(os.getcwd())".into()])
-        .output()
-        .unwrap();
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-    let lines: Vec<_> = String::from_utf8_lossy(&out.stdout).lines().map(str::to_string).collect();
-    assert_eq!(PathBuf::from(&lines[0]).canonicalize().unwrap(), m.venv_dir().canonicalize().unwrap());
-    assert_eq!(PathBuf::from(&lines[1]).canonicalize().unwrap(), m.hf_dir().canonicalize().unwrap());
-    assert_eq!(PathBuf::from(&lines[2]).canonicalize().unwrap(), m.work_dir().canonicalize().unwrap());
+    let out = trybox::exec_command(
+        &m,
+        &[
+            "python".into(),
+            "-c".into(),
+            "import os,sys;print(sys.prefix);print(os.environ['HF_HOME']);print(os.getcwd())"
+                .into(),
+        ],
+    )
+    .output()
+    .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let lines: Vec<_> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(
+        PathBuf::from(&lines[0]).canonicalize().unwrap(),
+        m.venv_dir().canonicalize().unwrap()
+    );
+    assert_eq!(
+        PathBuf::from(&lines[1]).canonicalize().unwrap(),
+        m.hf_dir().canonicalize().unwrap()
+    );
+    assert_eq!(
+        PathBuf::from(&lines[2]).canonicalize().unwrap(),
+        m.work_dir().canonicalize().unwrap()
+    );
 
     let notes = trybox::destroy(&m).unwrap();
     assert!(!m.dir.exists(), "{notes:?}");
@@ -137,18 +200,54 @@ fn recipes_read_like_a_man_page() {
     assert!(text.contains("mlx      11     Apple's machine learning framework"));
     let r = recipe("mlx").unwrap();
     let m = trybox::recipe::man(r, None);
-    let order = ["TRYBOX(MLX)", "NAME", "WHAT IT IS", "https://github.com/ml-explore/mlx", "REQUIREMENTS", "8 GB memory", "What your machine unlocks", "HELLO WORLD", "MLX sees the GPU", "TOUR", "1. Arrays like NumPy", "2. Talk to a language model", "GO FURTHER", "CAVEATS", "TRY IT", "trybox explore mlx", "UNDER THE HOOD"];
+    let order = [
+        "TRYBOX(MLX)",
+        "NAME",
+        "WHAT IT IS",
+        "https://github.com/ml-explore/mlx",
+        "REQUIREMENTS",
+        "8 GB memory",
+        "What your machine unlocks",
+        "HELLO WORLD",
+        "MLX sees the GPU",
+        "TOUR",
+        "1. Arrays like NumPy",
+        "2. Talk to a language model",
+        "GO FURTHER",
+        "CAVEATS",
+        "TRY IT",
+        "trybox explore mlx",
+        "UNDER THE HOOD",
+    ];
     let mut pos = 0;
     for needle in order {
-        let at = m[pos..].find(needle).unwrap_or_else(|| panic!("{needle:?} missing or out of order"));
+        let at = m[pos..]
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle:?} missing or out of order"));
         pos += at;
     }
-    assert!(m.lines().all(|l| l.len() <= 160), "some line is too wide for a man page: {:?}", m.lines().find(|l| l.len() > 160));
+    assert!(
+        m.lines().all(|l| l.len() <= 160),
+        "some line is too wide for a man page: {:?}",
+        m.lines().find(|l| l.len() > 160)
+    );
     // every recipe: hello + tour steps have all four parts, and go easy → advanced
     for r in trybox::recipe::RECIPES {
-        assert!(!r.what.is_empty() && !r.repo.is_empty(), "{} lacks description", r.name);
+        assert!(
+            !r.what.is_empty() && !r.repo.is_empty(),
+            "{} lacks description",
+            r.name
+        );
         for e in std::iter::once(&r.hello).chain(r.tour.iter()) {
-            assert!(!e.title.is_empty() && !e.learn.is_empty() && !e.run.is_empty() && !e.expect.is_empty(), "{}: {:?}", r.name, e.title);
+            assert!(
+                !e.title.is_empty()
+                    && !e.learn.is_empty()
+                    && !e.run.is_empty()
+                    && !e.expect.is_empty(),
+                "{}: {:?}",
+                r.name,
+                e.title
+            );
         }
         assert!(!r.tour.is_empty(), "{} has no tour", r.name);
     }
@@ -168,7 +267,11 @@ fn briefing_includes_hello_and_tour() {
 /// explore on a bare sandbox: creates it silently, runs the hello world, quits on EOF.
 #[test]
 fn explore_prepares_and_runs_hello() {
-    if std::process::Command::new("uv").arg("--version").output().is_err() {
+    if std::process::Command::new("uv")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
         eprintln!("skipping: uv missing");
         return;
     }
@@ -177,7 +280,10 @@ fn explore_prepares_and_runs_hello() {
     let m = trybox::explore::ensure_sandbox(tmp.path(), r, "b").unwrap();
     assert!(m.work_dir().join("CLAUDE.md").exists());
     // second call loads instead of recreating
-    assert_eq!(trybox::explore::ensure_sandbox(tmp.path(), r, "b").unwrap(), m);
+    assert_eq!(
+        trybox::explore::ensure_sandbox(tmp.path(), r, "b").unwrap(),
+        m
+    );
     assert!(trybox::explore::run_example(&m, &r.hello).unwrap());
 }
 
@@ -189,13 +295,30 @@ fn requirements_matrix_is_annotated_with_the_verdict() {
     assert_eq!(req.subject, "mlx");
     assert_eq!(req.tool_names(), vec!["uv"]);
     let mut spec = Spec {
-        version: 1, os: "macos".into(), arch: "aarch64".into(), chip: "Apple M1 Max".into(), cores: 10, memory_gb: 64, disk_free_gb: 60,
-        disk_path: "/".into(), gpus: vec![Gpu { kind: GpuKind::Metal, name: "m1".into(), memory_gb: None }],
-        tools: [("uv".to_string(), "uv 0.11".to_string())].into_iter().collect(),
+        version: 1,
+        os: "macos".into(),
+        arch: "aarch64".into(),
+        chip: "Apple M1 Max".into(),
+        cores: 10,
+        memory_gb: 64,
+        disk_free_gb: 60,
+        disk_path: "/".into(),
+        gpus: vec![Gpu {
+            kind: GpuKind::Metal,
+            name: "m1".into(),
+            memory_gb: None,
+        }],
+        tools: [("uv".to_string(), "uv 0.11".to_string())]
+            .into_iter()
+            .collect(),
     };
     let v = speccheck::check(&spec, &req);
     assert_eq!(v.outcome, Outcome::CanRun);
-    assert!(v.tiers.iter().all(|t| t.ok), "64 GB / 60 GB free unlocks every tier: {:?}", v.tiers);
+    assert!(
+        v.tiers.iter().all(|t| t.ok),
+        "64 GB / 60 GB free unlocks every tier: {:?}",
+        v.tiers
+    );
     let text = trybox::recipe::man(r, Some(&v));
     assert!(text.contains("This machine can run it."));
     assert!(text.contains("ok 8 GB memory"));
@@ -219,7 +342,15 @@ fn requirements_matrix_is_annotated_with_the_verdict() {
 fn dispose_removes_every_sandbox_and_reports() {
     let tmp = tempfile::tempdir().unwrap();
     for n in ["a", "b"] {
-        let m = Manifest::new(n, Backend::Uv, "bare", "3.12", vec![], tmp.path().join(n), HostInfo::default());
+        let m = Manifest::new(
+            n,
+            Backend::Uv,
+            "bare",
+            "3.12",
+            vec![],
+            tmp.path().join(n),
+            HostInfo::default(),
+        );
         std::fs::create_dir_all(m.work_dir()).unwrap();
         std::fs::write(m.work_dir().join("big"), vec![0u8; 1 << 20]).unwrap();
         m.save().unwrap();
@@ -255,7 +386,10 @@ fn overview_says_what_each_sandbox_is_and_how_far_you_got() {
     assert!(text.contains("hello + 2/10 steps"), "{text}");
     assert!(text.contains("trybox explore mlx"));
     assert!(text.contains("trybox dispose t1"));
-    assert!(text.lines().all(|l| l.len() <= 90), "a list line is too wide:\n{text}");
+    assert!(
+        text.lines().all(|l| l.len() <= 90),
+        "a list line is too wide:\n{text}"
+    );
     let st = trybox::status(&m);
     assert!(st.contains(" 1. Arrays like NumPy, on the GPU"));
     assert!(st.contains("✓ just now"));
@@ -267,7 +401,11 @@ fn overview_says_what_each_sandbox_is_and_how_far_you_got() {
 #[test]
 fn select_prompt_puts_recommended_first_and_parses_answers() {
     use trybox::ui::{Choice, order, parse_fallback, render};
-    let choices = vec![Choice::new("Alpha", "first"), Choice::new("Beta", "second").recommended(), Choice::new("Gamma", "")];
+    let choices = vec![
+        Choice::new("Alpha", "first"),
+        Choice::new("Beta", "second").recommended(),
+        Choice::new("Gamma", ""),
+    ];
     let ord = order(&choices);
     assert_eq!(ord, vec![1, 0, 2]);
     let frame = render("Pick one", &choices, &ord, 0, false);
@@ -302,7 +440,10 @@ fn tour_menu_recommends_next_undone_step_and_always_offers_dispose() {
         p.record(Some(i), true);
     }
     let c = trybox::explore::choices(r, &p, 0);
-    assert!(c[r.tour.len()].recommended, "agent is recommended once the tour is complete");
+    assert!(
+        c[r.tour.len()].recommended,
+        "agent is recommended once the tour is complete"
+    );
 }
 
 #[test]
@@ -340,11 +481,22 @@ fn home_menu_recommends_most_recent_sandbox_and_offers_dispose_per_sandbox() {
 fn tour_dispose_deletes_the_sandbox() {
     let tmp = tempfile::tempdir().unwrap();
     let r = recipe("bare").unwrap();
-    let m = Manifest::new("b", Backend::Venv, "bare", r.python, vec![], tmp.path().join("b"), HostInfo::default());
+    let m = Manifest::new(
+        "b",
+        Backend::Venv,
+        "bare",
+        r.python,
+        vec![],
+        tmp.path().join("b"),
+        HostInfo::default(),
+    );
     std::fs::create_dir_all(m.work_dir()).unwrap();
     m.save().unwrap();
     let c = trybox::explore::choices(r, &trybox::progress::Progress::default(), 0);
-    let dispose = c.iter().position(|c| c.label.starts_with("Dispose")).unwrap();
+    let dispose = c
+        .iter()
+        .position(|c| c.label.starts_with("Dispose"))
+        .unwrap();
     assert_eq!(dispose, r.tour.len() + 2);
     let notes = trybox::destroy(&m).unwrap();
     assert!(notes[0].starts_with("removed"));
@@ -366,5 +518,8 @@ fn agent_is_told_what_the_user_already_did() {
     p.record(Some(3), true);
     p.save(&m.dir).unwrap();
     let note = trybox::agent::progress_note(&m);
-    assert!(note.contains("Talk to a language model; How fast is the GPU really"), "{note}");
+    assert!(
+        note.contains("Talk to a language model; How fast is the GPU really"),
+        "{note}"
+    );
 }

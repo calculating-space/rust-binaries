@@ -69,7 +69,9 @@ impl Manifest {
             return Ok(None);
         }
         let data = std::fs::read(&p).with_context(|| format!("reading {}", p.display()))?;
-        Ok(Some(serde_json::from_slice(&data).context("parsing manifest.json")?))
+        Ok(Some(
+            serde_json::from_slice(&data).context("parsing manifest.json")?,
+        ))
     }
 
     pub fn save(&self, out_dir: &Path) -> Result<()> {
@@ -107,7 +109,7 @@ impl ScanState {
             return Ok(ScanState::default());
         }
         let data = std::fs::read(&p)?;
-        Ok(serde_json::from_slice(&data).context("parsing state.json")?)
+        serde_json::from_slice(&data).context("parsing state.json")
     }
 
     pub fn save(&self, out_dir: &Path) -> Result<()> {

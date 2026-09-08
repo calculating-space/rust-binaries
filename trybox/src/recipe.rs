@@ -40,13 +40,26 @@ pub struct Recipe {
 }
 
 fn rule(check: Check, severity: Severity, why: &str) -> Rule {
-    Rule { check, severity, why: why.into() }
+    Rule {
+        check,
+        severity,
+        why: why.into(),
+    }
 }
 fn tier(name: &str, enables: &str, checks: Vec<Check>) -> Tier {
-    Tier { name: name.into(), enables: enables.into(), checks }
+    Tier {
+        name: name.into(),
+        enables: enables.into(),
+        checks,
+    }
 }
 fn platform(pairs: &[(&str, &str)]) -> Check {
-    Check::Platform { any_of: pairs.iter().map(|(o, a)| (o.to_string(), a.to_string())).collect() }
+    Check::Platform {
+        any_of: pairs
+            .iter()
+            .map(|(o, a)| (o.to_string(), a.to_string()))
+            .collect(),
+    }
 }
 fn tool(name: &str) -> Check {
     Check::Tool { name: name.into() }
@@ -62,7 +75,10 @@ fn bare_requirements() -> Requirements {
     Requirements {
         version: speccheck::CONTRACT_VERSION,
         subject: "bare".into(),
-        rules: vec![rule(tool("uv"), Severity::Blocks, "uv builds the sandbox"), rule(disk(1), Severity::Blocks, "room for an interpreter")],
+        rules: vec![
+            rule(tool("uv"), Severity::Blocks, "uv builds the sandbox"),
+            rule(disk(1), Severity::Blocks, "room for an interpreter"),
+        ],
         tiers: vec![],
     }
 }
@@ -72,19 +88,61 @@ fn mlx_requirements() -> Requirements {
         version: speccheck::CONTRACT_VERSION,
         subject: "mlx".into(),
         rules: vec![
-            rule(platform(&[("macos", "aarch64"), ("linux", "x86_64"), ("linux", "aarch64")]), Severity::Blocks, "no MLX wheels for Intel Macs or Windows"),
-            rule(Check::Gpu { any_of: vec![GpuKind::Metal] }, Severity::Pointless, "without Apple Silicon MLX runs on the CPU and its whole point, unified memory on the GPU, is gone"),
+            rule(
+                platform(&[
+                    ("macos", "aarch64"),
+                    ("linux", "x86_64"),
+                    ("linux", "aarch64"),
+                ]),
+                Severity::Blocks,
+                "no MLX wheels for Intel Macs or Windows",
+            ),
+            rule(
+                Check::Gpu {
+                    any_of: vec![GpuKind::Metal],
+                },
+                Severity::Pointless,
+                "without Apple Silicon MLX runs on the CPU and its whole point, unified memory on the GPU, is gone",
+            ),
             rule(tool("uv"), Severity::Blocks, "uv builds the sandbox"),
-            rule(mem(8), Severity::Blocks, "the hello world and a 3B model need about 4 GB, plus headroom"),
-            rule(disk(5), Severity::Blocks, "packages (about 600 MB) plus the first 3B model (1.8 GB)"),
-            rule(mem(16), Severity::Recommended, "8B models in 4-bit want 6 GB of memory for the weights alone"),
+            rule(
+                mem(8),
+                Severity::Blocks,
+                "the hello world and a 3B model need about 4 GB, plus headroom",
+            ),
+            rule(
+                disk(5),
+                Severity::Blocks,
+                "packages (about 600 MB) plus the first 3B model (1.8 GB)",
+            ),
+            rule(
+                mem(16),
+                Severity::Recommended,
+                "8B models in 4-bit want 6 GB of memory for the weights alone",
+            ),
         ],
         tiers: vec![
-            tier("small models", "hello world and tour steps 1-5, 7, 8 (3B model)", vec![mem(8), disk(5)]),
+            tier(
+                "small models",
+                "hello world and tour steps 1-5, 7, 8 (3B model)",
+                vec![mem(8), disk(5)],
+            ),
             tier("8B models", "tour step 6", vec![mem(16), disk(12)]),
-            tier("convert your own", "tour step 9 (downloads a 1 GB model, writes a 4-bit copy)", vec![disk(8)]),
-            tier("30B-class models", "go further: ~17 GB of weights", vec![mem(32), disk(25)]),
-            tier("70B-class models", "go further: ~40 GB of weights, tight even at 64 GB", vec![mem(64), disk(50)]),
+            tier(
+                "convert your own",
+                "tour step 9 (downloads a 1 GB model, writes a 4-bit copy)",
+                vec![disk(8)],
+            ),
+            tier(
+                "30B-class models",
+                "go further: ~17 GB of weights",
+                vec![mem(32), disk(25)],
+            ),
+            tier(
+                "70B-class models",
+                "go further: ~40 GB of weights, tight even at 64 GB",
+                vec![mem(64), disk(50)],
+            ),
         ],
     }
 }
@@ -95,7 +153,13 @@ fn torch_requirements() -> Requirements {
         subject: "torch".into(),
         rules: vec![
             rule(tool("uv"), Severity::Blocks, "uv builds the sandbox"),
-            rule(Check::Gpu { any_of: vec![GpuKind::Metal, GpuKind::Cuda] }, Severity::Pointless, "this recipe is about GPU acceleration; without a GPU every step runs on the CPU"),
+            rule(
+                Check::Gpu {
+                    any_of: vec![GpuKind::Metal, GpuKind::Cuda],
+                },
+                Severity::Pointless,
+                "this recipe is about GPU acceleration; without a GPU every step runs on the CPU",
+            ),
             rule(mem(8), Severity::Blocks, "torch plus a 4096x4096 workload"),
             rule(disk(4), Severity::Blocks, "torch wheels are large"),
         ],
@@ -228,8 +292,12 @@ pub const RECIPES: &[Recipe] = &[
                 expect: "A loss well below 0.01.",
             },
         ],
-        suggestions: &["Time a small transformer forward pass on mps and cpu with warmup excluded, and note any op that falls back to CPU."],
-        caveats: &["MPS support has known gaps; fall back to CPU for unsupported ops and say which ops fell back."],
+        suggestions: &[
+            "Time a small transformer forward pass on mps and cpu with warmup excluded, and note any op that falls back to CPU.",
+        ],
+        caveats: &[
+            "MPS support has known gaps; fall back to CPU for unsupported ops and say which ops fell back.",
+        ],
         requirements: torch_requirements,
     },
     Recipe {
@@ -260,7 +328,9 @@ pub const RECIPES: &[Recipe] = &[
                 expect: "A short table of packages.",
             },
         ],
-        suggestions: &["Install the project the user names, run its own hello world, and report what it pulled in."],
+        suggestions: &[
+            "Install the project the user names, run its own hello world, and report what it pulled in.",
+        ],
         caveats: &[],
         requirements: bare_requirements,
     },
@@ -311,7 +381,12 @@ fn example(out: &mut String, label: &str, e: &Example) {
 pub fn table() -> String {
     let mut out = format!("{:<8} {:<6} {}\n", "RECIPE", "STEPS", "WHAT IT IS");
     for r in RECIPES {
-        out.push_str(&format!("{:<8} {:<6} {}\n", r.name, r.tour.len() + 1, r.summary));
+        out.push_str(&format!(
+            "{:<8} {:<6} {}\n",
+            r.name,
+            r.tour.len() + 1,
+            r.summary
+        ));
     }
     out
 }
@@ -323,12 +398,20 @@ pub fn requirements_section(r: &Recipe, verdict: Option<&Verdict>) -> String {
     if let Some(v) = verdict {
         let line = match v.outcome {
             speccheck::Outcome::CanRun => "This machine can run it.",
-            speccheck::Outcome::Pointless => "This machine can run it, but it does not make sense here (see below).",
+            speccheck::Outcome::Pointless => {
+                "This machine can run it, but it does not make sense here (see below)."
+            }
             speccheck::Outcome::CannotRun => "This machine cannot run it (see below).",
         };
         out.push_str(&format!("    {line}\n\n"));
     }
-    let width = req.rules.iter().map(|x| speccheck::need(&x.check).len()).max().unwrap_or(4).max(4);
+    let width = req
+        .rules
+        .iter()
+        .map(|x| speccheck::need(&x.check).len())
+        .max()
+        .unwrap_or(4)
+        .max(4);
     for (i, x) in req.rules.iter().enumerate() {
         let (mark, actual) = match verdict.and_then(|v| v.findings.get(i)) {
             Some(f) => (if f.pass { "ok" } else { "--" }, format!(" [{}]", f.actual)),
@@ -339,7 +422,10 @@ pub fn requirements_section(r: &Recipe, verdict: Option<&Verdict>) -> String {
             Severity::Pointless => "for it to make sense",
             Severity::Recommended => "recommended",
         };
-        out.push_str(&format!("    {mark} {:<width$}  {sev}{actual}\n", speccheck::need(&x.check)));
+        out.push_str(&format!(
+            "    {mark} {:<width$}  {sev}{actual}\n",
+            speccheck::need(&x.check)
+        ));
         out.push_str(&wrap(&x.why, 8 + width, 78 + width));
     }
     if !req.tiers.is_empty() {
@@ -351,7 +437,12 @@ pub fn requirements_section(r: &Recipe, verdict: Option<&Verdict>) -> String {
                 Some(_) => "--",
                 None => "  ",
             };
-            out.push_str(&format!("    {mark} {:<22} {} ({})\n", t.name, t.enables, needs.join(", ")));
+            out.push_str(&format!(
+                "    {mark} {:<22} {} ({})\n",
+                t.name,
+                t.enables,
+                needs.join(", ")
+            ));
         }
     }
     out.push('\n');
@@ -362,7 +453,10 @@ pub fn requirements_section(r: &Recipe, verdict: Option<&Verdict>) -> String {
 /// Pass a verdict to annotate the requirements with this machine's actual values.
 pub fn man(r: &Recipe, verdict: Option<&Verdict>) -> String {
     let upper = r.name.to_uppercase();
-    let mut out = format!("TRYBOX({upper})\n\nNAME\n    {} - {}\n\n", r.name, r.summary);
+    let mut out = format!(
+        "TRYBOX({upper})\n\nNAME\n    {} - {}\n\n",
+        r.name, r.summary
+    );
     out.push_str("WHAT IT IS\n");
     out.push_str(&wrap(r.what, 4, 78));
     out.push_str(&format!("    {}\n\n", r.repo));

@@ -1,5 +1,7 @@
 # rust-binaries
 
+[![ci](https://github.com/calculating-space/rust-binaries/actions/workflows/ci.yml/badge.svg)](https://github.com/calculating-space/rust-binaries/actions/workflows/ci.yml)
+
 A collection of focused deterministic tools that people and agents can use on
 their own or compose through files, stdin/stdout and library calls. Each package
 has a concrete job, its own CLI, tests and documented output contract.

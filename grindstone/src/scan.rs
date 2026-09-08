@@ -50,15 +50,28 @@ struct Candidate {
     subs: Vec<SubFile>,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum FileOutcome {
     Skipped(Vec<Source>),
-    Processed { sources: Vec<Source>, output: SessionOutput, project: String, session_id: String },
-    Failed { rel: String, err: String },
+    Processed {
+        sources: Vec<Source>,
+        output: SessionOutput,
+        project: String,
+        session_id: String,
+    },
+    Failed {
+        rel: String,
+        err: String,
+    },
 }
 
 pub fn run(opts: ScanOpts) -> Result<()> {
     let now_ms = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as i64;
-    let since_cutoff = opts.since.as_deref().map(|s| util::parse_since(s, now_ms)).transpose()?;
+    let since_cutoff = opts
+        .since
+        .as_deref()
+        .map(|s| util::parse_since(s, now_ms))
+        .transpose()?;
 
     if !opts.root.is_dir() {
         bail!("root {} is not a directory", opts.root.display());
@@ -68,8 +81,7 @@ pub fn run(opts: ScanOpts) -> Result<()> {
         for sub in ["facts", "texts"] {
             let p = opts.out.join(sub);
             if p.exists() {
-                std::fs::remove_dir_all(&p)
-                    .with_context(|| format!("removing {}", p.display()))?;
+                std::fs::remove_dir_all(&p).with_context(|| format!("removing {}", p.display()))?;
             }
         }
         for f in ["manifest.json", "state.json"] {
@@ -94,7 +106,12 @@ pub fn run(opts: ScanOpts) -> Result<()> {
     let mut state = ScanState::load(&opts.out)?;
     let prev_sources: BTreeMap<String, Source> = prev_manifest
         .as_ref()
-        .map(|m| m.sources.iter().map(|s| (s.path.clone(), s.clone())).collect())
+        .map(|m| {
+            m.sources
+                .iter()
+                .map(|s| (s.path.clone(), s.clone()))
+                .collect()
+        })
         .unwrap_or_default();
 
     // ---- discover ----
@@ -172,18 +189,27 @@ pub fn run(opts: ScanOpts) -> Result<()> {
         .map(|c| {
             let main = match std::fs::read(&c.abs) {
                 Ok(b) => b,
-                Err(e) => return FileOutcome::Failed { rel: c.rel.clone(), err: e.to_string() },
+                Err(e) => {
+                    return FileOutcome::Failed {
+                        rel: c.rel.clone(),
+                        err: e.to_string(),
+                    }
+                }
             };
             let mut subs: Vec<(String, Vec<u8>)> = Vec::new();
             for s in &c.subs {
                 match std::fs::read(&s.abs) {
                     Ok(b) => subs.push((s.rel.clone(), b)),
-                    Err(e) => return FileOutcome::Failed { rel: s.rel.clone(), err: e.to_string() },
+                    Err(e) => {
+                        return FileOutcome::Failed {
+                            rel: s.rel.clone(),
+                            err: e.to_string(),
+                        }
+                    }
                 }
             }
             let main_sha = util::sha256_hex(&main);
-            let sub_shas: Vec<String> =
-                subs.iter().map(|(_, b)| util::sha256_hex(b)).collect();
+            let sub_shas: Vec<String> = subs.iter().map(|(_, b)| util::sha256_hex(b)).collect();
             let complete = now_ms - c.mtime_ms > LIVE_WINDOW_MS;
 
             // checkpoint: skip only if the whole group is unchanged & complete
@@ -258,7 +284,10 @@ pub fn run(opts: ScanOpts) -> Result<()> {
         }
     }
     for o in &outcomes {
-        if let FileOutcome::Processed { output, session_id, .. } = o {
+        if let FileOutcome::Processed {
+            output, session_id, ..
+        } = o
+        {
             if let Some(s) = &output.session {
                 spans.push((session_id.clone(), s.start_ts, s.end_ts));
             }
@@ -285,7 +314,12 @@ pub fn run(opts: ScanOpts) -> Result<()> {
                 n_failed += 1;
                 eprintln!("warning: failed to read {rel}: {err}");
             }
-            FileOutcome::Processed { sources, mut output, project, session_id } => {
+            FileOutcome::Processed {
+                sources,
+                mut output,
+                project,
+                session_id,
+            } => {
                 n_processed += 1;
                 let complete = sources[0].complete;
                 if complete {
@@ -307,22 +341,30 @@ pub fn run(opts: ScanOpts) -> Result<()> {
                         format!("facts/{table}/project={project}/date={date}/{session_id}.parquet")
                     };
                     let sess_slice = std::slice::from_ref(&*sess);
-                    let writes: Vec<(String, arrow::record_batch::RecordBatch)> = [
-                        ("sessions", tables::sessions_batch(sess_slice)?),
-                        ("cycles", tables::cycles_batch(&output.cycles)?),
-                        ("api_calls", tables::api_calls_batch(&output.api_calls)?),
-                        ("tool_calls", tables::tool_calls_batch(&output.tool_calls)?),
-                        ("file_touches", tables::file_touches_batch(&output.file_touches)?),
-                    ]
-                    .into_iter()
-                    .map(|(t, b)| (part(t), b))
-                    .chain(include_text.then(|| {
-                        Ok::<_, anyhow::Error>((
+                    let writes: Vec<(String, arrow::record_batch::RecordBatch)> =
+                        [
+                            ("sessions", tables::sessions_batch(sess_slice)?),
+                            ("cycles", tables::cycles_batch(&output.cycles)?),
+                            ("api_calls", tables::api_calls_batch(&output.api_calls)?),
+                            ("tool_calls", tables::tool_calls_batch(&output.tool_calls)?),
+                            (
+                                "file_touches",
+                                tables::file_touches_batch(&output.file_touches)?,
+                            ),
+                        ]
+                        .into_iter()
+                        .map(|(t, b)| (part(t), b))
+                        .chain(
+                            include_text
+                                .then(|| {
+                                    Ok::<_, anyhow::Error>((
                             format!("texts/project={project}/date={date}/{session_id}.parquet"),
                             tables::texts_batch(&output.texts)?,
                         ))
-                    }).transpose()?)
-                    .collect();
+                                })
+                                .transpose()?,
+                        )
+                        .collect();
                     for (rel, batch) in writes {
                         if batch.num_rows() == 0 {
                             continue;
@@ -393,7 +435,10 @@ pub fn run(opts: ScanOpts) -> Result<()> {
     let manifest = Manifest {
         dataset: "grindstone".into(),
         schema_version: tables::SCHEMA_VERSION.into(),
-        generator: Generator { name: "grindstone".into(), version: tables::GENERATOR_VERSION.into() },
+        generator: Generator {
+            name: "grindstone".into(),
+            version: tables::GENERATOR_VERSION.into(),
+        },
         generated_at: util::ms_to_rfc3339(now_ms),
         local_tz: util::local_tz_name(),
         config: Config {
@@ -418,7 +463,11 @@ pub fn run(opts: ScanOpts) -> Result<()> {
 
     // ---- summary ----
     let t = |name: &str| manifest.tables.get(name).copied().unwrap_or_default();
-    println!("grindstone scan v{} → {}", tables::GENERATOR_VERSION, opts.out.display());
+    println!(
+        "grindstone scan v{} → {}",
+        tables::GENERATOR_VERSION,
+        opts.out.display()
+    );
     println!(
         "  files:     {} candidate(s) — {} processed, {} unchanged (skipped), {} failed",
         n_processed + n_skipped + n_failed,
@@ -445,8 +494,11 @@ pub fn run(opts: ScanOpts) -> Result<()> {
     if manifest.unknown_types.is_empty() {
         println!("  unknown types: none");
     } else {
-        let s: Vec<String> =
-            manifest.unknown_types.iter().map(|(k, v)| format!("{k}={v}")).collect();
+        let s: Vec<String> = manifest
+            .unknown_types
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect();
         println!("  unknown types: {}", s.join(", "));
     }
     Ok(())
@@ -469,7 +521,10 @@ fn count_parquet(dir: &Path) -> Result<TableStats> {
         .collect::<Result<Vec<_>>>()?
         .into_iter()
         .sum();
-    Ok(TableStats { rows, files: files.len() as u64 })
+    Ok(TableStats {
+        rows,
+        files: files.len() as u64,
+    })
 }
 
 pub fn collect_parquet(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
