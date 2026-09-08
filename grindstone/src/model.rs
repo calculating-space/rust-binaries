@@ -189,11 +189,9 @@ pub fn extract_assistant_message(message: Option<&Value>, want_text: bool) -> As
                         }
                     }
                 }
-                Some("thinking") => {
-                    if want_text {
-                        if let Some(t) = b.get("thinking").and_then(Value::as_str) {
-                            out.texts.push(("thinking", t.to_string()));
-                        }
+                Some("thinking") if want_text => {
+                    if let Some(t) = b.get("thinking").and_then(Value::as_str) {
+                        out.texts.push(("thinking", t.to_string()));
                     }
                 }
                 _ => {}
