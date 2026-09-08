@@ -1,0 +1,31 @@
+name: release
+
+# Tag `trybox-vX.Y.Z` to publish a prebuilt trybox for Apple Silicon. bootstrap.sh fetches
+# the latest release's trybox-macos-aarch64.tar.gz; when none exists it builds from source.
+on:
+  push:
+    tags: ["trybox-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  trybox-macos-aarch64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: brew install uv
+      - run: cargo test --release --manifest-path trybox/Cargo.toml
+      - name: package
+        run: |
+          tar -C trybox/target/release -czf trybox-macos-aarch64.tar.gz trybox
+          shasum -a 256 trybox-macos-aarch64.tar.gz > trybox-macos-aarch64.tar.gz.sha256
+          trybox/target/release/trybox --version
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" trybox-macos-aarch64.tar.gz trybox-macos-aarch64.tar.gz.sha256 \
+            --title "$GITHUB_REF_NAME" \
+            --notes "trybox for Apple Silicon Macs. Install with the quick start in the README, or: curl -fsSL https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/trybox-macos-aarch64.tar.gz | tar -xzf - -C /opt/homebrew/bin"

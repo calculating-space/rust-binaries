@@ -199,12 +199,15 @@ fn detect_finds_voices_a_microphone_and_versionless_tools_on_a_mac() {
         )
         .0
     );
-    // every Mac that can run this has a built-in microphone, external or not
-    assert!(
-        !s.audio_inputs.is_empty(),
-        "audio inputs: {:?}",
-        s.audio_inputs
-    );
+    // a laptop has a microphone; a CI runner may not, so only the shape is checked there
+    if std::env::var_os("CI").is_none() {
+        assert!(
+            !s.audio_inputs.is_empty(),
+            "audio inputs: {:?}",
+            s.audio_inputs
+        );
+    }
+    assert!(s.audio_inputs.iter().all(|d| !d.trim().is_empty()));
 }
 
 #[test]

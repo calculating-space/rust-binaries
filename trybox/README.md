@@ -22,9 +22,9 @@ sandbox exists, disposing it is one of the options.
 ## Your first five minutes
 
 **Install.** On an Apple Silicon Mac, once. The first line installs whatever
-prerequisites are missing and builds `cs`, the router that runs any tool here
-and builds it on first use; the rest is what it does, if you would rather do
-it by hand.
+prerequisites are missing (Xcode tools, Homebrew, uv, ffmpeg) and drops the
+prebuilt `trybox` from the latest release into `/opt/homebrew/bin`; the second
+block is the same by hand. No Rust needed.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/calculating-space/rust-binaries/main/bootstrap.sh | sh
@@ -33,15 +33,15 @@ curl -fsSL https://raw.githubusercontent.com/calculating-space/rust-binaries/mai
 ```sh
 xcode-select --install 2>/dev/null || true
 command -v brew >/dev/null || /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-command -v cargo >/dev/null || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 brew install uv ffmpeg
-git clone https://github.com/calculating-space/rust-binaries.git ~/rust-binaries   # keep it here: cs remembers this path
-cd ~/rust-binaries && cargo install --path cs
+curl -fsSL https://github.com/calculating-space/rust-binaries/releases/latest/download/trybox-macos-aarch64.tar.gz | tar -xzf - -C /opt/homebrew/bin
 ```
 
-Then `cs trybox` is the command. `cs trybox doctor` says which recipes this
-machine can run before anything is downloaded. Linux and Intel Macs can run
-the `bare` recipe only, since the others need the Mac GPU.
+Then `trybox` is the command, and `trybox doctor` says which recipes this
+machine can run before anything is downloaded. To build from source instead,
+`cargo install --path cs` in the repository gives you `cs`, and `cs trybox`
+builds and runs this package; that is the only route on Linux and Intel Macs,
+where the `bare` recipe is the one that runs, since the others need the Mac GPU.
 
 **Start something new.** Run `cs trybox`, choose *Start something new*, and
 pick a project. Each one says what it is, how many steps its tour has, and
