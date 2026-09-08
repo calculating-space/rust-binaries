@@ -1,0 +1,12 @@
+[package]
+name = "cs"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+description = "Router: `cs <tool> ...` runs a rust-binaries tool, building it first if needed"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+tempfile = "3"

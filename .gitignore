@@ -1,0 +1,25 @@
+# build output, one target dir per package
+target/
+
+# macOS
+.DS_Store
+
+# grindstone's dataset is built from the machine owner's own Claude Code transcripts
+/grindstone/out/
+
+# benchmark artifacts: generated fixtures (~200 MB) and local-only results
+/naive-wc/bench/fixtures/
+/naive-grep/bench/fixtures
+**/bench/results/
+**/bench/report.html
+
+# packages kept local for now; they will be published when they settle
+/claude-transcript/
+/grindbench/
+/naive-grep/
+/naive-wc/
+/reuse-scout/
+/sourcepack/
+
+# grindstone's tests hold redacted real sessions; kept private until reviewed
+/grindstone/tests/
