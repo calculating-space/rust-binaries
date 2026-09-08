@@ -250,6 +250,13 @@ fn recipes_read_like_a_man_page() {
             );
         }
         assert!(!r.tour.is_empty(), "{} has no tour", r.name);
+        let m = trybox::recipe::man(r, None);
+        assert!(
+            m.lines().all(|l| l.chars().count() <= 160),
+            "{}: man page line too wide: {:?}",
+            r.name,
+            m.lines().find(|l| l.chars().count() > 160)
+        );
     }
 }
 
@@ -295,7 +302,7 @@ fn requirements_matrix_is_annotated_with_the_verdict() {
     assert_eq!(req.subject, "mlx");
     assert_eq!(req.tool_names(), vec!["uv"]);
     let mut spec = Spec {
-        version: 1,
+        version: speccheck::CONTRACT_VERSION,
         os: "macos".into(),
         arch: "aarch64".into(),
         chip: "Apple M1 Max".into(),
@@ -311,6 +318,8 @@ fn requirements_matrix_is_annotated_with_the_verdict() {
         tools: [("uv".to_string(), "uv 0.11".to_string())]
             .into_iter()
             .collect(),
+        audio_inputs: vec![],
+        voices: vec![],
     };
     let v = speccheck::check(&spec, &req);
     assert_eq!(v.outcome, Outcome::CanRun);
@@ -336,6 +345,15 @@ fn requirements_matrix_is_annotated_with_the_verdict() {
     for r in trybox::recipe::RECIPES {
         assert_eq!((r.requirements)().subject, r.name);
     }
+    // whisper needs host features beyond tools: a French voice and a microphone, probed on demand
+    let p = (recipe("whisper").unwrap().requirements)().probes();
+    assert!(p.voices && p.audio_inputs, "{p:?}");
+    assert!(p.tools.contains(&"ffmpeg".to_string()) && p.tools.contains(&"say".to_string()));
+    let p = req.probes();
+    assert!(
+        !p.voices && !p.audio_inputs,
+        "mlx asks for nothing but tools: {p:?}"
+    );
 }
 
 #[test]

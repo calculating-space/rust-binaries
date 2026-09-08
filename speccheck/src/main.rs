@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use speccheck::{Requirements, Spec, check, render, spec};
+use speccheck::{Probes, Requirements, Spec, check, render, spec};
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -16,12 +16,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Detect this machine and print its spec as JSON.
+    /// Detect this machine (hardware, voices, microphones, the tools you name) and print its spec as JSON.
     Spec {
         /// Filesystem to measure free space on (default: $HOME)
         #[arg(long)]
         disk: Option<PathBuf>,
-        /// Tools to probe with --version (repeatable)
+        /// Tools to look up on PATH (repeatable)
         #[arg(long = "tool")]
         tools: Vec<String>,
     },
@@ -60,7 +60,7 @@ fn read_arg(path: &PathBuf) -> Result<String, String> {
 fn run(cli: Cli) -> Result<ExitCode, String> {
     match cli.command {
         Cmd::Spec { disk, tools } => {
-            let s = spec::detect(&disk.unwrap_or_else(home), &tools);
+            let s = spec::detect(&disk.unwrap_or_else(home), &Probes::everything(tools));
             println!(
                 "{}",
                 serde_json::to_string_pretty(&s).map_err(|e| e.to_string())?
@@ -86,7 +86,7 @@ fn run(cli: Cli) -> Result<ExitCode, String> {
                 Some(p) => {
                     serde_json::from_str(&read_arg(&p)?).map_err(|e| format!("spec: {e}"))?
                 }
-                None => spec::detect(&disk.unwrap_or_else(home), &req.tool_names()),
+                None => spec::detect(&disk.unwrap_or_else(home), &req.probes()),
             };
             let v = check(&s, &req);
             if json {

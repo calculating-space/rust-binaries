@@ -3,7 +3,7 @@
 use crate::backend;
 use crate::manifest::{Manifest, list};
 use crate::progress::{Progress, ago, gb};
-use crate::recipe::{RECIPES, Recipe, check_here, recipe};
+use crate::recipe::{RECIPES, Recipe, check_here, outcome_here, recipe};
 use crate::ui::{Choice, confirm, select};
 use speccheck::Outcome;
 use std::path::Path;
@@ -76,7 +76,7 @@ pub fn recipe_choices(
     let mut out = Vec::new();
     let mut recommended_done = false;
     for r in RECIPES {
-        let v = check_here(r, root);
+        let v = outcome_here(r, root);
         let verdict = match v.outcome {
             Outcome::CanRun => "can run here".to_string(),
             Outcome::Pointless => {

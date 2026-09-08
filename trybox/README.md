@@ -111,6 +111,7 @@ Projects with a tour today:
 | Recipe | What it is | Steps |
 | --- | --- | --- |
 | `mlx` | Apple's machine learning framework for Apple Silicon, with mlx-lm for running LLMs locally | 11 |
+| `whisper` | OpenAI's Whisper speech-to-text on the Mac GPU through MLX | 8 |
 | `torch` | PyTorch with Apple GPU acceleration | 4 |
 | `bare` | An empty Python, for anything without a recipe yet | 3 |
 

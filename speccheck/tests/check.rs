@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 
 fn m1max() -> Spec {
     Spec {
-        version: 1,
+        version: CONTRACT_VERSION,
         os: "macos".into(),
         arch: "aarch64".into(),
         chip: "Apple M1 Max".into(),
@@ -17,12 +17,14 @@ fn m1max() -> Spec {
             memory_gb: None,
         }],
         tools: BTreeMap::from([("uv".to_string(), "uv 0.11".to_string())]),
+        audio_inputs: vec!["MacBook Pro Microphone".into()],
+        voices: vec!["en_US".into(), "fr_CA".into(), "fr_FR".into()],
     }
 }
 
 fn reqs() -> Requirements {
     Requirements {
-        version: 1,
+        version: CONTRACT_VERSION,
         subject: "mlx".into(),
         rules: vec![
             Rule {
@@ -154,16 +156,125 @@ fn contracts_roundtrip_through_json() {
 
 #[test]
 fn detect_produces_a_plausible_spec() {
-    let s = spec::detect(
-        std::path::Path::new("."),
-        &["cargo".into(), "definitely-not-a-tool-xyz".into()],
-    );
+    let probes = Probes {
+        tools: vec![
+            "cargo".into(),
+            "true".into(),
+            "definitely-not-a-tool-xyz".into(),
+        ],
+        ..Default::default()
+    };
+    let s = spec::detect(std::path::Path::new("."), &probes);
     assert_eq!(s.version, CONTRACT_VERSION);
     assert!(s.cores >= 1);
     assert!(s.memory_gb >= 1);
     assert!(s.disk_free_gb >= 1);
     assert!(s.tools.contains_key("cargo"));
+    // on PATH, but prints nothing useful for --version: still counts as installed
+    assert!(s.tools.contains_key("true"));
     assert!(!s.tools.contains_key("definitely-not-a-tool-xyz"));
+    // not asked for, not probed
+    assert!(s.voices.is_empty() && s.audio_inputs.is_empty());
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn detect_finds_voices_a_microphone_and_versionless_tools_on_a_mac() {
+    let s = spec::detect(
+        std::path::Path::new("."),
+        &Probes::everything(vec!["say".into()]),
+    );
+    assert_eq!(s.tools.get("say").map(String::as_str), Some("found"));
+    assert!(
+        s.voices.iter().any(|v| v.starts_with("en_")),
+        "voices: {:?}",
+        s.voices
+    );
+    assert!(
+        evaluate(
+            &s,
+            &Check::Voice {
+                language: "en".into()
+            }
+        )
+        .0
+    );
+    // every Mac that can run this has a built-in microphone, external or not
+    assert!(
+        !s.audio_inputs.is_empty(),
+        "audio inputs: {:?}",
+        s.audio_inputs
+    );
+}
+
+#[test]
+fn microphone_and_voice_checks() {
+    let s = m1max();
+    assert_eq!(
+        evaluate(&s, &Check::AudioInput),
+        (true, "MacBook Pro Microphone".into())
+    );
+    let fr = Check::Voice {
+        language: "fr".into(),
+    };
+    assert_eq!(evaluate(&s, &fr), (true, "fr_CA, fr_FR".into()));
+    let fr_ca = Check::Voice {
+        language: "fr_CA".into(),
+    };
+    assert_eq!(evaluate(&s, &fr_ca), (true, "fr_CA".into()));
+    let de = Check::Voice {
+        language: "de".into(),
+    };
+    assert_eq!(evaluate(&s, &de), (false, "none of 3 voices".into()));
+    let mut s = s;
+    s.audio_inputs.clear();
+    assert_eq!(
+        evaluate(&s, &Check::AudioInput),
+        (false, "no microphone".into())
+    );
+    assert_eq!(need(&Check::AudioInput), "a microphone");
+    assert_eq!(need(&fr), "a `fr` speech voice");
+    // wire shape
+    assert_eq!(
+        serde_json::to_value(&Check::AudioInput).unwrap()["kind"],
+        "audio_input"
+    );
+    let j = serde_json::to_value(&fr).unwrap();
+    assert_eq!(
+        (j["kind"].as_str(), j["language"].as_str()),
+        (Some("voice"), Some("fr"))
+    );
+    // a spec saved without the new fields still loads
+    let mut j = serde_json::to_value(m1max()).unwrap();
+    j.as_object_mut().unwrap().remove("voices");
+    j.as_object_mut().unwrap().remove("audio_inputs");
+    let old: Spec = serde_json::from_value(j).unwrap();
+    assert!(old.voices.is_empty() && old.audio_inputs.is_empty());
+    // probes follow the checks
+    let mut r = reqs();
+    assert_eq!(
+        r.probes(),
+        Probes {
+            tools: vec!["uv".into()],
+            ..Default::default()
+        }
+    );
+    r.tiers.push(Tier {
+        name: "french".into(),
+        enables: "step 5".into(),
+        checks: vec![fr],
+    });
+    assert!(r.probes().voices && !r.probes().audio_inputs);
+    // a tier-only or recommended-only probe is skipped when only the outcome matters
+    r.rules.push(Rule {
+        check: Check::AudioInput,
+        severity: Severity::Recommended,
+        why: "step 7".into(),
+    });
+    assert!(r.probes().audio_inputs);
+    let quick = r.outcome_probes(Severity::Pointless);
+    assert!(!quick.voices && !quick.audio_inputs);
+    assert_eq!(quick.tools, vec!["uv"]);
 }
 
 #[test]

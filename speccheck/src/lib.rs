@@ -12,7 +12,7 @@ pub mod spec;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const CONTRACT_VERSION: u32 = 1;
+pub const CONTRACT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -44,6 +44,12 @@ pub struct Spec {
     pub disk_path: String,
     pub gpus: Vec<Gpu>,
     pub tools: BTreeMap<String, String>,
+    /// Microphones and other capture devices, by name. Empty when none, or not probed.
+    #[serde(default)]
+    pub audio_inputs: Vec<String>,
+    /// Installed text-to-speech voices as locale codes (`fr_FR`). Empty when none, or not probed.
+    #[serde(default)]
+    pub voices: Vec<String>,
 }
 
 /// One condition on a spec.
@@ -68,6 +74,12 @@ pub enum Check {
     },
     MinCores {
         n: u32,
+    },
+    /// A microphone: any audio capture device.
+    AudioInput,
+    /// A text-to-speech voice for a language: `fr` matches `fr_FR` and `fr_CA`, `fr_CA` only itself.
+    Voice {
+        language: String,
     },
 }
 
@@ -107,25 +119,70 @@ pub struct Requirements {
     pub tiers: Vec<Tier>,
 }
 
+/// What `spec::detect` must look for beyond the basics. Each probe is a subprocess, so
+/// callers ask only for what their requirements mention ([`Requirements::probes`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Probes {
+    /// Tools to look up on PATH and ask for a version.
+    pub tools: Vec<String>,
+    pub audio_inputs: bool,
+    pub voices: bool,
+}
+
+impl Probes {
+    /// Probe everything: for capturing a machine's full spec.
+    pub fn everything(tools: Vec<String>) -> Self {
+        Probes {
+            tools,
+            audio_inputs: true,
+            voices: true,
+        }
+    }
+}
+
 impl Requirements {
-    /// Every tool name any rule or tier asks about; feed it to `spec::detect`.
-    pub fn tool_names(&self) -> Vec<String> {
-        let mut names: Vec<String> = self
-            .rules
+    fn checks(&self) -> impl Iterator<Item = &Check> {
+        self.rules
             .iter()
             .map(|r| &r.check)
             .chain(self.tiers.iter().flat_map(|t| t.checks.iter()))
-            .filter_map(|c| {
-                if let Check::Tool { name } = c {
-                    Some(name.clone())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        names.sort();
-        names.dedup();
-        names
+    }
+
+    /// Everything `spec::detect` has to probe to answer these requirements.
+    pub fn probes(&self) -> Probes {
+        Self::probes_of(self.checks())
+    }
+
+    /// Only what decides the outcome: the checks of rules at `min_severity` or above.
+    /// Cheaper when a caller wants the verdict line and nothing else; recommended rows and
+    /// tiers may then read as unmet because their probes never ran.
+    pub fn outcome_probes(&self, min_severity: Severity) -> Probes {
+        Self::probes_of(
+            self.rules
+                .iter()
+                .filter(|r| r.severity >= min_severity)
+                .map(|r| &r.check),
+        )
+    }
+
+    fn probes_of<'a>(checks: impl Iterator<Item = &'a Check>) -> Probes {
+        let mut p = Probes::default();
+        for c in checks {
+            match c {
+                Check::Tool { name } => p.tools.push(name.clone()),
+                Check::AudioInput => p.audio_inputs = true,
+                Check::Voice { .. } => p.voices = true,
+                _ => {}
+            }
+        }
+        p.tools.sort();
+        p.tools.dedup();
+        p
+    }
+
+    /// Every tool name any rule or tier asks about.
+    pub fn tool_names(&self) -> Vec<String> {
+        self.probes().tools
     }
 }
 
@@ -195,7 +252,13 @@ pub fn need(c: &Check) -> String {
         Check::MinMemoryGb { gb } => format!("{gb} GB memory"),
         Check::MinDiskFreeGb { gb } => format!("{gb} GB free disk"),
         Check::MinCores { n } => format!("{n} CPU cores"),
+        Check::AudioInput => "a microphone".into(),
+        Check::Voice { language } => format!("a `{language}` speech voice"),
     }
+}
+
+fn voice_matches(voice: &str, language: &str) -> bool {
+    voice == language || voice.split(['_', '-']).next() == Some(language)
 }
 
 /// Evaluate one check. Returns pass and what the machine actually has.
@@ -230,6 +293,23 @@ pub fn evaluate(spec: &Spec, c: &Check) -> (bool, String) {
             format!("{} GB free", spec.disk_free_gb),
         ),
         Check::MinCores { n } => (spec.cores >= *n, format!("{} cores", spec.cores)),
+        Check::AudioInput => match spec.audio_inputs.first() {
+            Some(device) => (true, device.clone()),
+            None => (false, "no microphone".into()),
+        },
+        Check::Voice { language } => {
+            let have: Vec<&str> = spec
+                .voices
+                .iter()
+                .map(String::as_str)
+                .filter(|v| voice_matches(v, language))
+                .collect();
+            if have.is_empty() {
+                (false, format!("none of {} voices", spec.voices.len()))
+            } else {
+                (true, have.join(", "))
+            }
+        }
     }
 }
 
