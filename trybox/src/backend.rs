@@ -45,11 +45,29 @@ fn s(v: &str) -> String {
     v.to_string()
 }
 
+/// Hugging Face downloads, kept tidy: no telemetry, no "set a HF_TOKEN" nag, one classic
+/// progress bar per file instead of the xet backend's three, and bars that stay 80 columns
+/// wide on a wide terminal.
+pub const HF_QUIET: &[(&str, &str)] = &[
+    ("HF_HUB_DISABLE_TELEMETRY", "1"),
+    ("HF_HUB_VERBOSITY", "error"),
+    ("HF_HUB_DISABLE_XET", "1"),
+    ("TQDM_NCOLS", "80"),
+];
+
+fn hf_quiet_exports() -> String {
+    HF_QUIET
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Environment that makes the sandbox's interpreter and caches the only ones visible.
 pub fn sandbox_env(m: &Manifest) -> Vec<(String, String)> {
-    let mut env = vec![
-        (s("HF_HOME"), m.hf_dir().display().to_string()),
-        (s("HF_HUB_DISABLE_TELEMETRY"), s("1")),
+    let mut env = vec![(s("HF_HOME"), m.hf_dir().display().to_string())];
+    env.extend(HF_QUIET.iter().map(|(k, v)| (s(k), s(v))));
+    env.extend([
         (
             s("UV_CACHE_DIR"),
             m.cache_dir().join("uv").display().to_string(),
@@ -60,7 +78,7 @@ pub fn sandbox_env(m: &Manifest) -> Vec<(String, String)> {
         ),
         (s("TRYBOX_NAME"), m.name.clone()),
         (s("TRYBOX_DIR"), m.dir.display().to_string()),
-    ];
+    ]);
     if m.backend != Backend::Docker {
         let bin = m.venv_dir().join("bin");
         let path = std::env::var("PATH").unwrap_or_default();
@@ -72,8 +90,9 @@ pub fn sandbox_env(m: &Manifest) -> Vec<(String, String)> {
 
 fn dockerfile(m: &Manifest) -> String {
     let mut out = format!(
-        "FROM python:{}-slim\nENV HF_HOME=/hf PIP_NO_CACHE_DIR=1\nWORKDIR /work\n",
-        m.python
+        "FROM python:{}-slim\nENV HF_HOME=/hf PIP_NO_CACHE_DIR=1 {}\nWORKDIR /work\n",
+        m.python,
+        hf_quiet_exports()
     );
     if !m.packages.is_empty() {
         out.push_str(&format!(
@@ -96,8 +115,9 @@ fn exec_script(m: &Manifest) -> String {
             tag = m.docker_tag()
         ),
         _ => format!(
-            "#!/bin/sh\n# run a command inside the {name} sandbox environment\nexport VIRTUAL_ENV=\"{venv}\" HF_HOME=\"{hf}\" HF_HUB_DISABLE_TELEMETRY=1 UV_CACHE_DIR=\"{cache}/uv\" PIP_CACHE_DIR=\"{cache}/pip\"\nexport PATH=\"$VIRTUAL_ENV/bin:$PATH\"\ncd \"{work}\"\nexec \"$@\"\n",
+            "#!/bin/sh\n# run a command inside the {name} sandbox environment\nexport VIRTUAL_ENV=\"{venv}\" HF_HOME=\"{hf}\" {quiet} UV_CACHE_DIR=\"{cache}/uv\" PIP_CACHE_DIR=\"{cache}/pip\"\nexport PATH=\"$VIRTUAL_ENV/bin:$PATH\"\ncd \"{work}\"\nexec \"$@\"\n",
             name = m.name,
+            quiet = hf_quiet_exports(),
             venv = m.venv_dir().display(),
             hf = m.hf_dir().display(),
             cache = m.cache_dir().display(),
@@ -240,9 +260,23 @@ fn set_executable(_: &Path) -> Result<(), String> {
 
 /// A command that runs `argv` inside the sandbox, ready to spawn or exec.
 pub fn exec_command(m: &Manifest, argv: &[String]) -> Command {
+    refresh_wrapper(m);
     let mut cmd = Command::new(m.dir.join("x"));
     cmd.args(argv);
     cmd
+}
+
+/// Rewrite the `x` wrapper when it differs from what this build would generate, so a sandbox
+/// made by an older trybox runs with today's environment. Best effort: a failure here shows
+/// up as the old behaviour, not an error.
+fn refresh_wrapper(m: &Manifest) {
+    let path = m.dir.join("x");
+    let want = exec_script(m);
+    if std::fs::read_to_string(&path).ok().as_deref() != Some(want.as_str())
+        && std::fs::write(&path, &want).is_ok()
+    {
+        let _ = set_executable(&path);
+    }
 }
 
 /// Remove the sandbox directory and, for docker, its image. Returns human-readable notes.

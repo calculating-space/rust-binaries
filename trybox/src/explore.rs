@@ -41,18 +41,41 @@ pub fn ensure_sandbox(root: &Path, r: &Recipe, sandbox: &str) -> Result<Manifest
     Ok(m)
 }
 
-/// Run one example: show what it teaches, the command, run it, then what to look for.
+/// Run one example in two phases: fetch the models it declares (setup, visible), then show
+/// the command, run it, and say what to look for.
 pub fn run_example(m: &Manifest, e: &Example) -> Result<bool, String> {
     let mut out = std::io::stdout().lock();
     writeln!(out, "\n== {}\n   {}\n", e.title, e.learn).ok();
+    for repo in e.models {
+        writeln!(
+            out,
+            "   fetching {repo} (kept in the sandbox; instant if already there)"
+        )
+        .ok();
+        out.flush().ok();
+        let py = format!("from huggingface_hub import snapshot_download as d; d({repo:?})");
+        let status = exec_command(m, &["python".into(), "-c".into(), py])
+            .status()
+            .map_err(|e| format!("fetch: {e}"))?;
+        if !status.success() {
+            writeln!(out, "\n   could not fetch {repo}; this step needs it\n").ok();
+            return Ok(false);
+        }
+    }
+    if !e.models.is_empty() {
+        writeln!(out).ok();
+    }
     for (i, l) in e.run.lines().enumerate() {
         writeln!(out, "   {} {l}", if i == 0 { "$" } else { " " }).ok();
     }
     writeln!(out).ok();
     out.flush().ok();
-    let status = exec_command(m, &["sh".into(), "-c".into(), e.run.to_string()])
-        .status()
-        .map_err(|e| format!("run: {e}"))?;
+    let mut cmd = exec_command(m, &["sh".into(), "-c".into(), e.run.to_string()]);
+    if !e.models.is_empty() {
+        // everything this step needs is already here: no bars flashing inside its own output
+        cmd.env("HF_HUB_DISABLE_PROGRESS_BARS", "1");
+    }
+    let status = cmd.status().map_err(|e| format!("run: {e}"))?;
     writeln!(
         out,
         "\n   expected: {}{}\n",
@@ -75,25 +98,26 @@ pub enum Next {
     Disposed,
 }
 
-/// The tour menu: steps first (next undone one recommended), then agent, man page, dispose, back.
+/// The tour menu: the hello world (to run again), the steps (next undone one recommended),
+/// then agent, man page, dispose, back.
 pub fn choices(r: &Recipe, p: &Progress, size_bytes: u64) -> Vec<Choice> {
     let next_undone = (0..r.tour.len()).find(|&i| !p.done(i));
-    let mut out: Vec<Choice> = r
-        .tour
-        .iter()
-        .enumerate()
-        .map(|(i, e)| {
-            let c = Choice::new(
-                format!("{}{}", if p.done(i) { "✓ " } else { "" }, e.title),
-                e.learn,
-            );
-            if Some(i) == next_undone {
-                c.recommended()
-            } else {
-                c
-            }
-        })
-        .collect();
+    let hello_ok = p.hello.as_ref().is_some_and(|h| h.ok);
+    let mut out = vec![Choice::new(
+        format!("{}{}", if hello_ok { "✓ " } else { "" }, r.hello.title),
+        format!("The hello world, any time. {}", r.hello.learn),
+    )];
+    out.extend(r.tour.iter().enumerate().map(|(i, e)| {
+        let c = Choice::new(
+            format!("{}{}", if p.done(i) { "✓ " } else { "" }, e.title),
+            e.learn,
+        );
+        if Some(i) == next_undone {
+            c.recommended()
+        } else {
+            c
+        }
+    }));
     let mut agent = Choice::new(
         "Hand over to the agent",
         "Open-ended: an agent inside the sandbox proposes and runs experiments with you",
@@ -138,21 +162,26 @@ pub fn tour(m: &Manifest, r: &Recipe) -> Result<Next, String> {
             return Ok(Next::Quit);
         };
         match pick {
-            i if i < steps => {
-                let ok = run_example(m, &r.tour[i])?;
-                progress.record(Some(i), ok);
+            0 => {
+                let ok = run_example(m, &r.hello)?;
+                progress.record(None, ok);
                 progress.save(&m.dir)?;
             }
-            i if i == steps => {
+            i if i <= steps => {
+                let ok = run_example(m, &r.tour[i - 1])?;
+                progress.record(Some(i - 1), ok);
+                progress.save(&m.dir)?;
+            }
+            i if i == steps + 1 => {
                 progress.agent_sessions += 1;
                 progress.save(&m.dir)?;
                 return Ok(Next::Agent);
             }
-            i if i == steps + 1 => {
+            i if i == steps + 2 => {
                 let v = crate::recipe::check_here(r, &m.dir);
                 print!("\n{}", crate::recipe::man(r, Some(&v)));
             }
-            i if i == steps + 2 => {
+            i if i == steps + 3 => {
                 if confirm(
                     &format!("Dispose {} and free {}?", m.name, gb(size)),
                     "Yes, dispose it",

@@ -61,25 +61,28 @@ mlx 0.32.2 on Device(gpu, 0)
 
 **Take the tour.** Then the menu of steps. Each step says what it will show
 you and what it will download, before you commit. Completed steps are ticked;
-the next one is recommended.
+the next one is recommended. The hello world stays on the menu, so you can run
+it again whenever you like.
 
 ```text
 mlx: what next? (hello + 2/10 steps)
 ❯  1. Talk to a language model (Recommended)
       Downloads a 3B model in 4-bit (about 1.8 GB, once) and generates text. The last lines report tokens per second; that number is the point of MLX.
-   2. ✓ Arrays like NumPy, on the GPU
+   2. ✓ MLX sees the GPU
+      The hello world, any time. Imports MLX and asks which device it computes on.
+   3. ✓ Arrays like NumPy, on the GPU
       The API is NumPy-shaped. Work is lazy: nothing computes until you ask for a value.
-   3. Chat with it
+   4. Chat with it
       An interactive chat loop on the same model. Type `q` to leave.
-   4. How fast is the GPU really
+   5. How fast is the GPU really
       A single large matrix multiply, timed after a warmup. Compare with the CPU number below.
    ...
-  11. Hand over to the agent
+  12. Hand over to the agent
       Open-ended: an agent inside the sandbox proposes and runs experiments with you
-  12. Read the man page
-  13. Dispose this sandbox
+  13. Read the man page
+  14. Dispose this sandbox
       Delete the environment and everything it downloaded, freeing 0.6 GB
-  14. Back
+  15. Back
 ```
 
 Pick one, see it run, see what to look for, back to the menu. Quit whenever
@@ -94,8 +97,9 @@ environment was built:
 1. **What it is.** A paragraph on what the project does and why you would
    care.
 2. **Hello world.** One command that proves it works on your machine.
-3. **Steps, easy to advanced.** Each with a title, what it shows, what it
-   downloads, the command, and what you should see. The mlx tour goes from
+3. **Steps, easy to advanced.** Each with a title, what it shows, the models
+   it needs (fetched first, as a visible setup phase, so downloads never mix
+   with the step's own output), the command, and what you should see. The mlx tour goes from
    arrays on the GPU, to talking with a language model, to measuring the GPU,
    to training a model from scratch, to quantizing a model yourself, to
    serving it as an API.
@@ -205,7 +209,8 @@ with the generated Dockerfile.
 uv needed), `docker` (Linux container, no GPU on macOS). A recipe names its
 backend; `create --backend` overrides.
 
-**Recipes are data.** They live in [src/recipe.rs](src/recipe.rs); adding a
+**Recipes are data.** Each lives in its own module under
+[src/recipe/](src/recipe/) (`mlx.rs`, `whisper.rs`, ...); adding a
 project is adding an entry: what it is, the hello world, the steps, the
 agent's suggestions, the caveats, and the requirements matrix. The matrix uses
 the [speccheck](../speccheck) contract, so it composes with the standalone

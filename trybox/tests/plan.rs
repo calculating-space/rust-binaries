@@ -47,11 +47,18 @@ fn uv_plan_creates_venv_then_installs_inside_sandbox() {
     for step in &plan.steps {
         let env: std::collections::HashMap<_, _> = step.env.iter().cloned().collect();
         assert_eq!(env["HF_HOME"], "/s/t1/hf");
+        assert_eq!(
+            env["HF_HUB_VERBOSITY"], "error",
+            "no HF_TOKEN nag in the sandbox"
+        );
+        assert_eq!(env["HF_HUB_DISABLE_XET"], "1");
+        assert_eq!(env["TQDM_NCOLS"], "80");
         assert_eq!(env["UV_CACHE_DIR"], "/s/t1/cache/uv");
         assert!(env["PATH"].starts_with("/s/t1/.venv/bin:"));
     }
     let x = plan.files.iter().find(|(p, _)| p.ends_with("x")).unwrap();
     assert!(x.1.contains("HF_HOME=\"/s/t1/hf\""));
+    assert!(x.1.contains("HF_HUB_VERBOSITY=error HF_HUB_DISABLE_XET=1 TQDM_NCOLS=80"));
 }
 
 #[test]
@@ -87,6 +94,9 @@ fn docker_plan_builds_tagged_image_from_generated_dockerfile() {
         .unwrap();
     assert!(df.1.starts_with("FROM python:3.12-slim"));
     assert!(df.1.contains("pip install --no-cache-dir mlx mlx-lm huggingface_hub"));
+    assert!(df.1.contains(
+        "ENV HF_HOME=/hf PIP_NO_CACHE_DIR=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_VERBOSITY=error"
+    ));
     let x = plan.files.iter().find(|(p, _)| p.ends_with("x")).unwrap();
     assert!(x.1.contains("docker run --rm"));
     assert!(x.1.contains("/s/t1/work:/work"));
@@ -346,13 +356,41 @@ fn requirements_matrix_is_annotated_with_the_verdict() {
         assert_eq!((r.requirements)().subject, r.name);
     }
     // whisper needs host features beyond tools: a French voice and a microphone, probed on demand
-    let p = (recipe("whisper").unwrap().requirements)().probes();
+    let w = recipe("whisper").unwrap();
+    assert_eq!(w.hello.models, ["mlx-community/whisper-tiny"]);
+    assert!(
+        trybox::recipe::man(w, None)
+            .contains("Fetched first: mlx-community/whisper-large-v3-turbo")
+    );
+    assert!(
+        recipe("bare")
+            .unwrap()
+            .tour
+            .iter()
+            .all(|e| e.models.is_empty())
+    );
+    let p = (w.requirements)().probes();
     assert!(p.voices && p.audio_inputs, "{p:?}");
     assert!(p.tools.contains(&"ffmpeg".to_string()) && p.tools.contains(&"say".to_string()));
     let p = req.probes();
     assert!(
         !p.voices && !p.audio_inputs,
         "mlx asks for nothing but tools: {p:?}"
+    );
+}
+
+#[test]
+fn stale_wrapper_is_refreshed_before_running() {
+    let tmp = tempfile::tempdir().unwrap();
+    let m = manifest(Backend::Uv, tmp.path().join("old"));
+    std::fs::create_dir_all(&m.dir).unwrap();
+    std::fs::write(m.dir.join("x"), "#!/bin/sh\nexec \"$@\"\n").unwrap();
+    let _ = trybox::exec_command(&m, &["true".into()]);
+    let x = std::fs::read_to_string(m.dir.join("x")).unwrap();
+    assert!(x.contains("HF_HUB_VERBOSITY=error"), "{x}");
+    assert!(
+        x.starts_with("#!/bin/sh\n# run a command inside the "),
+        "{x}"
     );
 }
 
@@ -445,22 +483,35 @@ fn tour_menu_recommends_next_undone_step_and_always_offers_dispose() {
     use trybox::progress::Progress;
     let r = recipe("mlx").unwrap();
     let mut p = Progress::default();
+    p.record(None, true);
     p.record(Some(0), true);
     let c = trybox::explore::choices(r, &p, 5 << 30);
-    assert_eq!(c.len(), r.tour.len() + 4);
-    assert!(c[0].label.starts_with("✓ "));
-    assert!(!c[0].recommended);
-    assert!(c[1].recommended, "step 2 is the next undone step");
-    assert_eq!(c[r.tour.len()].label, "Hand over to the agent");
-    assert!(c[r.tour.len() + 2].label.starts_with("Dispose"));
-    assert!(c[r.tour.len() + 2].detail.contains("5.0 GB"));
+    assert_eq!(c.len(), r.tour.len() + 5);
+    assert_eq!(
+        c[0].label,
+        format!("✓ {}", r.hello.title),
+        "hello world stays available"
+    );
+    assert!(c[0].detail.starts_with("The hello world, any time."));
+    assert!(c[1].label.starts_with("✓ "));
+    assert!(!c[0].recommended && !c[1].recommended);
+    assert!(c[2].recommended, "step 2 is the next undone step");
+    assert_eq!(c[r.tour.len() + 1].label, "Hand over to the agent");
+    assert!(c[r.tour.len() + 3].label.starts_with("Dispose"));
+    assert!(c[r.tour.len() + 3].detail.contains("5.0 GB"));
     for i in 0..r.tour.len() {
         p.record(Some(i), true);
     }
     let c = trybox::explore::choices(r, &p, 0);
     assert!(
-        c[r.tour.len()].recommended,
+        c[r.tour.len() + 1].recommended,
         "agent is recommended once the tour is complete"
+    );
+    let failed = Progress::default();
+    let c = trybox::explore::choices(r, &failed, 0);
+    assert_eq!(
+        c[0].label, r.hello.title,
+        "an unfinished hello world is not ticked"
     );
 }
 
@@ -515,7 +566,7 @@ fn tour_dispose_deletes_the_sandbox() {
         .iter()
         .position(|c| c.label.starts_with("Dispose"))
         .unwrap();
-    assert_eq!(dispose, r.tour.len() + 2);
+    assert_eq!(dispose, r.tour.len() + 3);
     let notes = trybox::destroy(&m).unwrap();
     assert!(notes[0].starts_with("removed"));
     assert!(!m.dir.exists());
