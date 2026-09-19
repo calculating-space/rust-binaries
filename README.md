@@ -11,7 +11,8 @@ has a concrete job, its own CLI, tests and documented output contract.
 | [trybox](trybox) | Guided tour of a project: menu-driven sandbox, requirements check, tour steps, resident agent | Yes |
 | [speccheck](speccheck) | Machine spec vs requirements matrix: can run, pointless, or cannot run | Yes; JSON in, verdict out |
 | [grindstone](grindstone) | Claude Code usage metrics in Parquet; dataset checks | Yes |
-| [sieve](sieve) | Context governor for agent sessions: `sieve run` bounds a command's output and spills the rest to disk | Yes |
+| [grindreport](grindreport) | Renders a grindstone dataset as a report: terminal text, Markdown for agents, self-contained HTML, JSON | Yes |
+| [sieve](sieve) | Context governor for Claude Code: a hook folds oversized Bash results to head, marker, tail with the full output on disk; `sieve run` does the same standalone | Yes |
 | [cs](cs) | Router: `cs <tool> ...` runs any tool above, building it on first use | Yes |
 
 More tools from the same workshop will be published here as they settle.
@@ -81,6 +82,7 @@ Current dependency direction:
 ```text
 trybox -> speccheck (requirements contract and pure checker)
 grindstone -> its own metrics implementation
+grindreport -> grindstone's dataset contract only (Parquet schema 1.x and manifest), not its code
 sieve -> nothing; its ledger is a contract grindstone may read later
 cs -> nothing; it only knows the directory layout
 ```
