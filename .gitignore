@@ -26,3 +26,10 @@ target/
 
 # working notes and specs, not part of the published tree
 /docs/
+
+# Harbor (Terminal-Bench) output; never committed, see docs/harbor.md
+jobs/
+terminal-bench-2/
+
+# Python bytecode, from sieve's Harbor agent
+__pycache__/

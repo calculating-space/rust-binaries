@@ -1,0 +1,8 @@
+{
+ "session_id": "8f47cdaf-957e-4ad3-82b9-8c26ce758548",
+ "transcript_path": "/home/user/redacted/transcript_path",
+ "cwd": "/home/user/redacted/cwd",
+ "scratchpad_dir": "/home/user/redacted/scratchpad_dir",
+ "hook_event_name": "SessionStart",
+ "source": "startup"
+}

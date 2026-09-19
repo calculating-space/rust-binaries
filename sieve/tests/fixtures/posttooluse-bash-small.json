@@ -1,0 +1,23 @@
+{
+ "session_id": "385df58f-59c3-4209-8c17-58ce58fca664",
+ "transcript_path": "/home/user/redacted/transcript_path",
+ "cwd": "/home/user/redacted/cwd",
+ "scratchpad_dir": "/home/user/redacted/scratchpad_dir",
+ "prompt_id": "d76342a4-e30a-4855-9437-c2f781d51834",
+ "permission_mode": "default",
+ "hook_event_name": "PostToolUse",
+ "tool_name": "Bash",
+ "tool_input": {
+  "command": "echo hello",
+  "description": "Run echo hello"
+ },
+ "tool_response": {
+  "stdout": "hello",
+  "stderr": "",
+  "interrupted": false,
+  "isImage": false,
+  "noOutputExpected": false
+ },
+ "tool_use_id": "toolu_01Qm852KKEipY31YD2wLxCHK",
+ "duration_ms": 1739
+}

@@ -1,0 +1,15 @@
+{
+ "session_id": "8f47cdaf-957e-4ad3-82b9-8c26ce758548",
+ "transcript_path": "/home/user/redacted/transcript_path",
+ "cwd": "/home/user/redacted/cwd",
+ "scratchpad_dir": "/home/user/redacted/scratchpad_dir",
+ "prompt_id": "be615abc-3445-4dca-8a75-bef17bd3c3e4",
+ "permission_mode": "default",
+ "hook_event_name": "PreToolUse",
+ "tool_name": "Bash",
+ "tool_input": {
+  "command": "seq 1 3",
+  "description": "Sequence from 1 to 3"
+ },
+ "tool_use_id": "toolu_01KDLvVaQAa9QsWpkRYCjt3J"
+}

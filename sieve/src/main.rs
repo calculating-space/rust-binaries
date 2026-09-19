@@ -1,5 +1,6 @@
 use clap::{Args, Parser, Subcommand};
-use sieve::{Bounds, Folder, Spill, sieve_home};
+use sieve::policy::Policy;
+use sieve::{Bounds, Folder, Spill, hook, install, ledger, sieve_home};
 use std::io::{self, Read, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
@@ -17,6 +18,28 @@ struct Cli {
 enum Cmd {
     /// Run a shell command with bounded output; the full output goes to a spill file
     Run(RunArgs),
+    /// Claude Code hook: JSON in on stdin, decision out on stdout, always exit 0
+    Hook {
+        /// Event name as Claude Code passes it, e.g. PostToolUse
+        event: String,
+    },
+    /// Add sieve's hooks to a settings.json (idempotent); --dry-run shows the diff
+    Install(InstallArgs),
+    /// Remove sieve's hooks from a settings.json, leaving other hooks alone
+    Uninstall(InstallArgs),
+}
+
+#[derive(Args)]
+struct InstallArgs {
+    /// Target ./.claude/settings.json instead of ~/.claude/settings.json
+    #[arg(long)]
+    project: bool,
+    /// Print the diff and change nothing
+    #[arg(long)]
+    dry_run: bool,
+    /// Hook command prefix to register [default: this binary's absolute path + " hook"]
+    #[arg(long, value_name = "CMD")]
+    command: Option<String>,
 }
 
 #[derive(Args)]
@@ -155,10 +178,91 @@ fn now_millis() -> u128 {
         .unwrap_or(0)
 }
 
+/// Everything the hook does is wrapped so that it exits 0 no matter what.
+fn hook_main(event: &str) -> i32 {
+    let outcome = std::panic::catch_unwind(|| {
+        let mut raw = String::new();
+        if io::stdin().read_to_string(&mut raw).is_err() {
+            return;
+        }
+        let input: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+        let home = sieve_home();
+        let cwd = input.get("cwd").and_then(|v| v.as_str()).map(std::path::Path::new);
+        let (policy, warnings) = Policy::load(&home, cwd);
+        for w in warnings {
+            eprintln!("sieve: policy: {w}");
+        }
+        let ts = ledger::now_rfc3339();
+        let out = hook::decide(event, &input, &policy, &home, &ts);
+        if policy.ledger
+            && let Some(line) = &out.ledger_line
+            && let Some(session) = input.get("session_id").and_then(|v| v.as_str())
+        {
+            ledger::append(&home, session, line);
+        }
+        if let Some(v) = out.output {
+            let mut stdout = io::stdout().lock();
+            let _ = writeln!(stdout, "{v}");
+            let _ = stdout.flush();
+        }
+    });
+    if outcome.is_err() {
+        eprintln!("sieve: internal error; no decision");
+    }
+    0
+}
+
+fn install_main(args: InstallArgs, remove: bool) -> Result<i32, String> {
+    let cwd = std::env::current_dir().map_err(|e| format!("cannot read cwd: {e}"))?;
+    let home_dir = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .ok_or("HOME is not set")?;
+    let path = install::settings_path(args.project, &cwd, &home_dir);
+    let prefix = match args.command {
+        Some(c) => c,
+        None => {
+            let exe = std::env::current_exe().map_err(|e| format!("cannot locate this binary: {e}"))?;
+            format!("{} hook", exe.display())
+        }
+    };
+    let before = install::read_settings(&path)?;
+    let after = if remove {
+        install::without_hooks(&before)
+    } else {
+        install::with_hooks(&before, &prefix)
+    };
+    if before == after {
+        println!(
+            "{}: {}",
+            path.display(),
+            if remove { "no sieve hooks present" } else { "sieve hooks already installed" }
+        );
+        return Ok(0);
+    }
+    let (b, a) = (install::pretty(&before), install::pretty(&after));
+    print!("{}", install::diff(&b, &a, &path.display().to_string()));
+    if args.dry_run {
+        println!("(dry run: nothing written)");
+        return Ok(0);
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+    }
+    std::fs::write(&path, a).map_err(|e| format!("{}: {e}", path.display()))?;
+    println!("wrote {}", path.display());
+    Ok(0)
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.cmd {
         Cmd::Run(args) => run(args),
+        Cmd::Hook { event } => Ok(hook_main(&event)),
+        Cmd::Install(args) => install_main(args, false),
+        Cmd::Uninstall(args) => install_main(args, true),
     };
     match result {
         Ok(code) => ExitCode::from(code.clamp(0, 255) as u8),

@@ -9,6 +9,92 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+pub mod hook;
+pub mod install;
+pub mod ledger;
+pub mod policy;
+
+/// Where the full output can be found, for the marker line.
+#[derive(Debug, Clone, Copy)]
+pub enum SpillNote<'a> {
+    Path(&'a Path),
+    Failed(&'a str),
+    None,
+}
+
+/// The marker line, with its trailing newline and without a leading one.
+pub fn marker_line(total: u64, not_shown: u64, spill: SpillNote) -> String {
+    let mut m = format!("[sieve: {} total, {} not shown; ", human(total), human(not_shown));
+    match spill {
+        SpillNote::Path(p) => m.push_str(&format!(
+            "full output in {}; Grep it or Read a range]\n",
+            p.display()
+        )),
+        SpillNote::Failed(e) => m.push_str(&format!("full output not saved: {e}]\n")),
+        SpillNote::None => m.push_str("full output not saved]\n"),
+    }
+    m
+}
+
+/// Largest prefix of `s` at most `n` bytes long that ends on a char boundary.
+pub fn prefix_chars(s: &str, n: usize) -> &str {
+    if n >= s.len() {
+        return s;
+    }
+    let mut i = n;
+    while !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    &s[..i]
+}
+
+/// Largest suffix of `s` at most `n` bytes long that starts on a char boundary.
+pub fn suffix_chars(s: &str, n: usize) -> &str {
+    if n >= s.len() {
+        return s;
+    }
+    let mut i = s.len() - n;
+    while !s.is_char_boundary(i) {
+        i += 1;
+    }
+    &s[i..]
+}
+
+/// Result of folding text that is already in memory.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Folded {
+    pub text: String,
+    pub total: u64,
+    pub shown: u64,
+}
+
+/// Fold text already in hand: head from `head_src`, tail from `tail_src`
+/// (the same string, or the end of a file when `head_src` is only a
+/// prefix), `total` the full size. `None` when it fits under the cap.
+pub fn fold_text(
+    head_src: &str,
+    tail_src: &str,
+    total: u64,
+    bounds: Bounds,
+    spill: SpillNote,
+) -> Option<Folded> {
+    if total <= bounds.cap as u64 {
+        return None;
+    }
+    let head = prefix_chars(head_src, bounds.head);
+    let tail = suffix_chars(tail_src, bounds.tail);
+    let shown = (head.len() + tail.len()) as u64;
+    let not_shown = total.saturating_sub(shown);
+    let mut text = String::with_capacity(head.len() + tail.len() + 160);
+    text.push_str(head);
+    if !head.is_empty() && !head.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(&marker_line(total, not_shown, spill));
+    text.push_str(tail);
+    Some(Folded { text, total, shown })
+}
+
 /// Output limits in bytes. `cap` must be at least `head + tail`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bounds {
@@ -204,19 +290,12 @@ impl<W: Write> Folder<W> {
         if self.last_out.is_some_and(|b| b != b'\n') {
             marker.push('\n');
         }
-        marker.push_str(&format!(
-            "[sieve: {} total, {} not shown; ",
-            human(self.total),
-            human(not_shown)
-        ));
-        match (&spill_path, &spill_error) {
-            (Some(p), None) => marker.push_str(&format!(
-                "full output in {}; Grep it or Read a range]\n",
-                p.display()
-            )),
-            (_, Some(e)) => marker.push_str(&format!("full output not saved: {e}]\n")),
-            (None, None) => marker.push_str("full output not saved]\n"),
-        }
+        let note = match (&spill_path, &spill_error) {
+            (Some(p), None) => SpillNote::Path(p),
+            (_, Some(e)) => SpillNote::Failed(e),
+            (None, None) => SpillNote::None,
+        };
+        marker.push_str(&marker_line(self.total, not_shown, note));
         self.emit(marker.as_bytes())?;
         let pending = std::mem::take(&mut self.pending);
         self.emit(&pending)?;
@@ -345,6 +424,33 @@ mod tests {
     #[test]
     fn cap_below_head_plus_tail_is_rejected() {
         assert!(Bounds { cap: 5, head: 4, tail: 2 }.validate().is_err());
+    }
+
+    #[test]
+    fn fold_text_under_cap_is_none() {
+        assert!(fold_text("abc", "abc", 3, b(3, 1, 1), SpillNote::None).is_none());
+    }
+
+    #[test]
+    fn fold_text_over_cap_layout() {
+        let f = fold_text("0123456789", "0123456789", 10, b(6, 3, 2), SpillNote::None).unwrap();
+        assert_eq!(f.text, "012\n[sieve: 10 B total, 5 B not shown; full output not saved]\n89");
+        assert_eq!(f.shown, 5);
+    }
+
+    #[test]
+    fn fold_text_respects_char_boundaries() {
+        // "é" is two bytes; a 3-byte head must not split the second "é".
+        let s = "éééé";
+        let f = fold_text(s, s, 8, b(6, 3, 3), SpillNote::None).unwrap();
+        assert!(f.text.starts_with("é\n[sieve:"));
+        assert!(f.text.ends_with("]\né"));
+    }
+
+    #[test]
+    fn fold_text_with_separate_tail_source() {
+        let f = fold_text("HEADHEAD", "…TAIL", 1000, b(10, 4, 4), SpillNote::Path(Path::new("/x/y.out"))).unwrap();
+        assert_eq!(f.text, "HEAD\n[sieve: 1000 B total, 992 B not shown; full output in /x/y.out; Grep it or Read a range]\nTAIL");
     }
 
     #[test]
