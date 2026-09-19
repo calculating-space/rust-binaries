@@ -19,9 +19,24 @@ use crate::session::{
 use crate::tables;
 use crate::util;
 
-/// A file whose mtime is within this window of scan start is considered live
-/// (still growing) and marked `is_complete = false`.
-const LIVE_WINDOW_MS: i64 = 300_000;
+/// True when neither the main transcript nor any subagent file changed
+/// between the directory walk (`c.mtime_ms` is the group's newest mtime) and
+/// the end of this read: nothing is still being written to. This detects
+/// growth, not freshness: a finished file is complete however recent it is,
+/// while one that grew, was truncated or vanished mid-scan is live and gets
+/// re-emitted on the next run.
+fn group_settled(c: &Candidate, main_len: usize, subs: &[(String, Vec<u8>)]) -> bool {
+    let files = std::iter::once((&c.abs, main_len))
+        .chain(c.subs.iter().zip(subs).map(|(s, (_, b))| (&s.abs, b.len())));
+    let mut newest = i64::MIN;
+    for (abs, len) in files {
+        match std::fs::metadata(abs) {
+            Ok(md) if md.len() as usize == len => newest = newest.max(mtime_of(&md)),
+            _ => return false,
+        }
+    }
+    newest <= c.mtime_ms
+}
 
 pub struct ScanOpts {
     pub root: PathBuf,
@@ -210,7 +225,7 @@ pub fn run(opts: ScanOpts) -> Result<()> {
             }
             let main_sha = util::sha256_hex(&main);
             let sub_shas: Vec<String> = subs.iter().map(|(_, b)| util::sha256_hex(b)).collect();
-            let complete = now_ms - c.mtime_ms > LIVE_WINDOW_MS;
+            let complete = group_settled(c, main.len(), &subs);
 
             // checkpoint: skip only if the whole group is unchanged & complete
             let unchanged = |rel: &str, sha: &str, bytes: u64| {
@@ -231,11 +246,12 @@ pub fn run(opts: ScanOpts) -> Result<()> {
 
             let output =
                 session::process_session(&c.session_id, &c.project, &main, &subs, include_text);
+            // rows_emitted counts the five facts tables only; texts rows are
+            // an optional side table and are not part of the accounting.
             let total_rows = output.cycles.len()
                 + output.api_calls.len()
                 + output.tool_calls.len()
                 + output.file_touches.len()
-                + output.texts.len()
                 + output.session.is_some() as usize;
             let sub_rows: u64 = output.sub_stats.iter().map(|s| s.rows_emitted).sum();
             let sub_skipped: u64 = output.sub_stats.iter().map(|s| s.skipped_lines).sum();

@@ -801,7 +801,7 @@ pub fn process_session(
         }
         out.sub_stats.push(SubagentStats {
             path: sub_path.clone(),
-            rows_emitted: (out.api_calls.len() + out.tool_calls.len() + out.texts.len()
+            rows_emitted: (out.api_calls.len() + out.tool_calls.len()
                 - rows_before) as u64,
             skipped_lines: out.skipped_lines - skipped_before,
         });
