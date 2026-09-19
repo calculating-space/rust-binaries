@@ -401,7 +401,7 @@ fn doctor_lists_every_recipe_with_a_verdict_and_a_reason() {
     let tmp = tempfile::tempdir().unwrap();
     let verdicts = trybox::doctor::recipe_verdicts(tmp.path());
     let names: Vec<_> = verdicts.iter().map(|v| v.name.as_str()).collect();
-    assert_eq!(names, ["mlx", "whisper", "torch", "bare"]);
+    assert_eq!(names, ["mlx", "whisper", "torch", "harbor", "bare"]);
     for v in &verdicts {
         assert_eq!(v.outcome == Outcome::CanRun, v.why.is_empty(), "{v:?}");
     }

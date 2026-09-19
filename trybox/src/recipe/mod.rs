@@ -6,6 +6,7 @@ use serde::Serialize;
 use speccheck::Requirements;
 
 mod bare;
+mod harbor;
 mod matrix;
 mod mlx;
 mod render;
@@ -56,7 +57,7 @@ pub struct Recipe {
 }
 
 /// Every recipe, in menu order.
-pub const RECIPES: &[Recipe] = &[mlx::RECIPE, whisper::RECIPE, torch::RECIPE, bare::RECIPE];
+pub const RECIPES: &[Recipe] = &[mlx::RECIPE, whisper::RECIPE, torch::RECIPE, harbor::RECIPE, bare::RECIPE];
 
 pub fn recipe(name: &str) -> Result<&'static Recipe, String> {
     RECIPES.iter().find(|r| r.name == name).ok_or_else(|| {
