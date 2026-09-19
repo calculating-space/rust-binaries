@@ -16,6 +16,7 @@ target/
 # packages kept local for now; they will be published when they settle
 /claude-transcript/
 /grindbench/
+/judge/
 /naive-grep/
 /naive-wc/
 /reuse-scout/
@@ -33,3 +34,6 @@ terminal-bench-2/
 
 # Python bytecode, from sieve's Harbor agent
 __pycache__/
+
+# local helper scripts, kept out of the tree for now
+/scripts/
