@@ -1,0 +1,17 @@
+[package]
+name = "cast"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+description = "A tiny script language for spawning agents: `[paper1,paper2].map(p => researcher)` runs one Claude Code per item, all in parallel"
+license = "MIT"
+
+[dependencies]
+clap = { version = "4.6", features = ["derive"] }
+oneshot = { path = "../oneshot" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+tempfile = "3"
+
+[dev-dependencies]
+tempfile = "3"

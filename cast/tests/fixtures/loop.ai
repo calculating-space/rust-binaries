@@ -1,0 +1,20 @@
+import { agent, bench } from "ai"
+
+const config = {
+  model: "haiku",
+  system: "Make the loss drop.",
+  tools: ["Read", "Edit"],
+  cwd: process.env.WORK,
+  budget: { runs: Number(process.env.RUNS ?? 10), usd: Number(process.env.USD ?? 1) },
+}
+const cmd = `sh ${process.env.BENCH} ${process.env.STATE} ${process.env.MODE ?? ""}`
+const target = 0
+
+const coder = agent(config)
+let result = await bench(cmd)
+while (result.loss > target && config.budget.runs-- > 0) {
+  const rec = await coder.run(`loss ${result.loss}: ${(result.diagnostics ?? [result.error]).join(", ")}`)
+  console.log(rec.result)
+  result = await bench(cmd)
+}
+console.log(result.loss <= target ? "resolved" : "out of budget", result.loss, coder.spent.usd.toFixed(2))
