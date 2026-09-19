@@ -13,6 +13,7 @@ has a concrete job, its own CLI, tests and documented output contract.
 | [grindstone](grindstone) | Claude Code usage metrics in Parquet; dataset checks | Yes |
 | [grindreport](grindreport) | Renders a grindstone dataset as a report: terminal text, Markdown for agents, self-contained HTML, JSON | Yes |
 | [sieve](sieve) | Context governor for Claude Code: a hook folds oversized Bash results to head, marker, tail with the full output on disk; `sieve run` does the same standalone | Yes |
+| [oneshot](oneshot) | Hand a prompt to an agent (Claude Code headless), get the result back as text or a JSON record with exit status, cost and turns | Yes |
 | [cs](cs) | Router: `cs <tool> ...` runs any tool above, building it on first use | Yes |
 
 More tools from the same workshop will be published here as they settle.
